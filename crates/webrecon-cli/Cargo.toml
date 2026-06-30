@@ -12,6 +12,7 @@ path = "src/main.rs"
 webrecon-core = { path = "../webrecon-core" }
 webrecon-whois = { path = "../webrecon-whois" }
 webrecon-subdomains = { path = "../webrecon-subdomains" }
+webrecon-portscan = { path = "../webrecon-portscan" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

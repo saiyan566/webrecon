@@ -1,0 +1,15 @@
+[package]
+name = "webrecon-portscan"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+webrecon-core = { path = "../webrecon-core" }
+tokio = { workspace = true }
+trust-dns-resolver = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }
+ipnet = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

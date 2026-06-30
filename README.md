@@ -13,7 +13,8 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 | 0     | Workspace scaffold, CLI, colored UI         | ✅ done |
 | 1     | `whois` (RDAP), `asn` (Cymru), `cidr` (RIPEstat) | ✅ done |
 | 2     | `subs` — subdomain enum (passive crt.sh/OTX/HackerTarget + active brute force) | ✅ done |
-| 3     | Port scanner (TCP connect + SYN) + banners  | ⏳ planned |
+| 3     | `scan` — TCP connect port scanner + banner grab (top-100 / top-1000 / custom) | ✅ done |
+| 3.5   | SYN scan (raw sockets, root)                | ⏳ planned |
 | 4     | CVE lookup (NVD / CIRCL)                    | ⏳ planned |
 | 5     | HTTP fingerprinting + unified `recon` pipeline | ⏳ planned |
 
@@ -55,6 +56,11 @@ webrecon subs example.com                 # passive only
 webrecon subs example.com --active        # + brute force with embedded wordlist
 webrecon subs example.com --active --wordlist /path/to/list.txt --concurrency 100
 webrecon subs example.com --no-passive --active   # active only
+
+webrecon scan scanme.nmap.org              # top-100 ports, banner grab
+webrecon scan 1.1.1.1 --top 1000           # top-1000 ports
+webrecon scan target.com --ports 22,80,443,8000-8100
+webrecon scan 10.0.0.0/28 --no-banner --concurrency 1000
 ```
 
 ### Global flags

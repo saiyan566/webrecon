@@ -31,6 +31,29 @@ enum Cmd {
     Asn { target: String },
     /// Announced CIDR prefixes for an ASN
     Cidr { target: String },
+    /// TCP connect port scan (host/IP/CIDR) with optional banner grab
+    Scan {
+        /// host, IP, or CIDR (e.g. example.com / 1.2.3.4 / 10.0.0.0/28)
+        target: String,
+        /// Port spec: "80,443,8000-8100". Overrides --top.
+        #[arg(long)]
+        ports: Option<String>,
+        /// Use top-N nmap ports (100 or 1000). Ignored if --ports given.
+        #[arg(long, default_value_t = 100)]
+        top: u16,
+        /// Concurrent connect attempts per host
+        #[arg(long, default_value_t = 500)]
+        concurrency: usize,
+        /// Per-port connect timeout (ms)
+        #[arg(long, default_value_t = 1500)]
+        connect_timeout: u64,
+        /// Skip banner grab on open ports
+        #[arg(long)]
+        no_banner: bool,
+        /// Max hosts to expand from a CIDR
+        #[arg(long, default_value_t = 256)]
+        max_hosts: usize,
+    },
     /// Enumerate subdomains (passive + optional active brute force)
     Subs {
         /// Apex domain (e.g. example.com)
@@ -65,6 +88,9 @@ async fn main() {
         Cmd::Cidr { target } => commands::cidr::run(target, cli.timeout, cli.json).await,
         Cmd::Subs { target, no_passive, active, wordlist, concurrency } => {
             commands::subs::run(target, *no_passive, *active, wordlist.as_deref(), *concurrency, cli.timeout, cli.json).await
+        }
+        Cmd::Scan { target, ports, top, concurrency, connect_timeout, no_banner, max_hosts } => {
+            commands::scan::run(target, ports.as_deref(), *top, *concurrency, *connect_timeout, *no_banner, *max_hosts, cli.json).await
         }
     };
 
