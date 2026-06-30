@@ -1,5 +1,5 @@
 [package]
-name = "webrecon-subdomains"
+name = "webrecon-ipintel"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,7 +10,4 @@ tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-trust-dns-resolver = { workspace = true }
 anyhow = { workspace = true }
-futures = { workspace = true }
-base64 = { workspace = true }

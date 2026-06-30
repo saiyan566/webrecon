@@ -65,6 +65,18 @@ enum Cmd {
         #[command(subcommand)]
         action: CveAction,
     },
+    /// IPinfo geo/ASN/org lookup (requires WEBRECON_IPINFO)
+    Ipinfo { ip: String },
+    /// GreyNoise community noise/riot classification (requires WEBRECON_GREYNOISE)
+    Greynoise { ip: String },
+    /// AbuseIPDB abuse score + reports (requires WEBRECON_ABUSEIPDB)
+    Abuseipdb {
+        ip: String,
+        #[arg(long, default_value_t = 90)]
+        max_age: u32,
+    },
+    /// Show resolved config: where keys are loaded from and which are present
+    Config,
     /// TCP connect port scan (host/IP/CIDR) with optional banner grab
     Scan {
         /// host, IP, or CIDR (e.g. example.com / 1.2.3.4 / 10.0.0.0/28)
@@ -127,6 +139,10 @@ async fn main() {
             commands::scan::run(target, ports.as_deref(), *top, *concurrency, *connect_timeout, *no_banner, *max_hosts, cli.json).await
         }
         Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
+        Cmd::Ipinfo { ip } => commands::ipintel::ipinfo(ip, cli.timeout, cli.json).await,
+        Cmd::Greynoise { ip } => commands::ipintel::greynoise(ip, cli.timeout, cli.json).await,
+        Cmd::Abuseipdb { ip, max_age } => commands::ipintel::abuseipdb(ip, *max_age, cli.timeout, cli.json).await,
+        Cmd::Config => commands::config_show::run(cli.json),
     };
 
     if let Err(e) = result {

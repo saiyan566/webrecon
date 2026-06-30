@@ -2,28 +2,41 @@ use crate::ui;
 use crate::CveAction;
 use anyhow::Result;
 use std::time::Duration;
-use webrecon_cve::{http_client, nvd, fingerprint};
+use webrecon_core::Config;
+use webrecon_cve::{http_client, nvd, vulners, fingerprint};
 use webrecon_portscan::{resolve_targets, scan::{scan_host, ScanOpts}, ports::{parse_spec, TOP_100, TOP_1000}};
 
 pub async fn run(action: &CveAction, timeout: u64, as_json: bool) -> Result<()> {
     let client = http_client(timeout.max(30));
+    let cfg = Config::load();
+    let nvd_key = cfg.keys.nvd.as_deref();
+    let vulners_key = cfg.keys.vulners.as_deref();
 
     match action {
         CveAction::Id { id } => {
             let pb = if !as_json { Some(ui::spinner(&format!("NVD lookup {id}"))) } else { None };
-            let cve = nvd::fetch_by_id(&client, id).await?;
+            let cve = nvd::fetch_by_id(&client, nvd_key, id).await?;
             if let Some(pb) = pb { pb.finish_and_clear(); }
             if as_json { ui::print_json(&serde_json::to_value(&cve)?); return Ok(()); }
             render_one(&cve);
         }
         CveAction::Search { product, version, limit } => {
-            let pb = if !as_json {
-                Some(ui::spinner(&format!("NVD search {product} {}", version.clone().unwrap_or_default())))
-            } else { None };
-            let cves = nvd::search(&client, product, version.as_deref(), *limit).await?;
+            let label = format!("{} {}", product, version.clone().unwrap_or_default());
+            let pb = if !as_json { Some(ui::spinner(&format!("CVE search {label}"))) } else { None };
+
+            let (source, cves) = lookup_cves(&client, vulners_key, nvd_key, product, version.as_deref(), *limit).await;
             if let Some(pb) = pb { pb.finish_and_clear(); }
-            if as_json { ui::print_json(&serde_json::to_value(&cves)?); return Ok(()); }
-            ui::section(&format!("CVE search — {} {}", product, version.clone().unwrap_or_default()));
+            let cves = cves?;
+
+            if as_json {
+                ui::print_json(&serde_json::json!({
+                    "source": source, "product": product, "version": version,
+                    "results": cves,
+                }));
+                return Ok(());
+            }
+            ui::section(&format!("CVE search — {label}"));
+            ui::kv("source", source);
             ui::kv("results", &cves.len().to_string());
             for c in &cves { render_summary_line(c); }
         }
@@ -59,16 +72,16 @@ pub async fn run(action: &CveAction, timeout: u64, as_json: bool) -> Result<()> 
                 for p in &open {
                     let banner = match &p.banner { Some(b) => b, None => continue };
                     let fp = match fingerprint::parse(banner) { Some(f) => f, None => continue };
-                    let pb2 = if !as_json {
-                        Some(ui::spinner(&format!("CVE lookup {} {}", fp.product, fp.version.clone().unwrap_or_default())))
-                    } else { None };
-                    let cves = nvd::search(&client, &fp.product, fp.version.as_deref(), *limit)
-                        .await.unwrap_or_default();
+                    let label = format!("{} {}", fp.product, fp.version.clone().unwrap_or_default());
+                    let pb2 = if !as_json { Some(ui::spinner(&format!("CVE lookup {label}"))) } else { None };
+                    let (source, cves) = lookup_cves(&client, vulners_key, nvd_key, &fp.product, fp.version.as_deref(), *limit).await;
+                    let cves = cves.unwrap_or_default();
                     if let Some(pb2) = pb2 { pb2.finish_and_clear(); }
 
                     if !as_json {
-                        ui::section(&format!("{}/tcp  {} {}", p.port, fp.product, fp.version.clone().unwrap_or_default()));
+                        ui::section(&format!("{}/tcp  {}", p.port, label));
                         ui::kv("banner", banner);
+                        ui::kv("source", source);
                         ui::kv("cves", &cves.len().to_string());
                         for c in &cves { render_summary_line(c); }
                     }
@@ -77,6 +90,7 @@ pub async fn run(action: &CveAction, timeout: u64, as_json: bool) -> Result<()> 
                         "port": p.port,
                         "service": p.service,
                         "fingerprint": fp,
+                        "cve_source": source,
                         "cves": cves,
                     }));
                 }
@@ -96,6 +110,26 @@ pub async fn run(action: &CveAction, timeout: u64, as_json: bool) -> Result<()> 
         }
     }
     Ok(())
+}
+
+/// Prefer Vulners (when key present and product+version known); fall back to NVD keyword search.
+async fn lookup_cves(
+    client: &reqwest::Client,
+    vulners_key: Option<&str>,
+    nvd_key: Option<&str>,
+    product: &str,
+    version: Option<&str>,
+    limit: usize,
+) -> (&'static str, Result<Vec<nvd::CveSummary>>) {
+    if let (Some(vk), Some(v)) = (vulners_key, version) {
+        let r = vulners::audit_software(client, vk, product, v).await
+            .map(|mut x| { x.truncate(limit); x })
+            .map_err(|e| anyhow::anyhow!(e));
+        return ("vulners", r);
+    }
+    let r = nvd::search(client, nvd_key, product, version, limit).await
+        .map_err(|e| anyhow::anyhow!(e));
+    ("nvd", r)
 }
 
 fn render_one(c: &nvd::CveSummary) {

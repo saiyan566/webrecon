@@ -7,6 +7,7 @@ members = [
     "crates/webrecon-subdomains",
     "crates/webrecon-portscan",
     "crates/webrecon-cve",
+    "crates/webrecon-ipintel",
 ]
 
 [workspace.package]
@@ -31,3 +32,6 @@ trust-dns-resolver = "0.23"
 ipnet = "2.9"
 url = "2.5"
 futures = "0.3"
+toml = "0.8"
+dirs = "5"
+base64 = "0.22"

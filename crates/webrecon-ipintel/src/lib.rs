@@ -1,6 +1,6 @@
-pub mod nvd;
-pub mod vulners;
-pub mod fingerprint;
+pub mod ipinfo;
+pub mod greynoise;
+pub mod abuseipdb;
 
 use reqwest::Client;
 use std::time::Duration;

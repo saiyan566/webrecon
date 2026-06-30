@@ -1,3 +1,6 @@
+pub mod config;
+pub use config::{Config, Keys};
+
 use serde::{Deserialize, Serialize};
 use std::net::IpAddr;
 use std::str::FromStr;

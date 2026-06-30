@@ -1,7 +1,7 @@
 use crate::ui;
 use anyhow::Result;
 use std::path::Path;
-use webrecon_core::Target;
+use webrecon_core::{Config, Target};
 use webrecon_subdomains::{active, passive, dedupe, http_client, DEFAULT_WORDLIST};
 
 pub async fn run(
@@ -25,7 +25,8 @@ pub async fn run(
     if !no_passive {
         let pb = if !as_json { Some(ui::spinner(&format!("passive enum for {}", apex))) } else { None };
         let client = http_client(timeout);
-        let results = passive::run_all(&client, &apex).await;
+        let cfg = Config::load();
+        let results = passive::run_all(&client, &apex, &cfg.keys).await;
         if let Some(pb) = pb { pb.finish_and_clear(); }
         for r in results {
             per_source.push((r.source.to_string(), r.hosts.len(), r.error.clone()));

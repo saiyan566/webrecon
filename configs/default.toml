@@ -1,17 +1,20 @@
-# webrecon default configuration
-# Copy to ~/.config/webrecon/config.toml and fill in keys as you add modules.
-
-[http]
-timeout_secs = 15
-retries = 1
-user_agent = "webrecon/0.1"
+# webrecon configuration
+# Copy this to ~/.config/webrecon/config.toml and fill in the keys you have.
+# Every key is optional — modules that need a missing key will say so at runtime.
+# Env vars override file values: WEBRECON_SHODAN, WEBRECON_VIRUSTOTAL, etc.
 
 [keys]
-# Reserved for later phases — leave empty until those modules land.
-shodan = ""
-securitytrails = ""
-virustotal = ""
-nvd_api = ""
+shodan         = ""
+ipinfo         = ""
+pulsedive      = ""
+vulners        = ""
+intelx         = ""
+greynoise      = ""
+virustotal     = ""
+otx            = ""
+nvd            = ""
+abuseipdb      = ""
 
-[output]
-color = "auto"   # auto | always | never
+# Censys uses two values
+censys_api_id     = ""
+censys_api_secret = ""

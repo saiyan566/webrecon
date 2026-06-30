@@ -16,7 +16,11 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 | 3     | `scan` — TCP connect port scanner + banner grab (top-100 / top-1000 / custom) | ✅ done |
 | 3.5   | SYN scan (raw sockets, root)                | ⏳ planned |
 | 4     | `cve` — NVD lookup by ID, keyword search, or scan→fingerprint→CVE chain | ✅ done |
-| 5     | HTTP fingerprinting + unified `recon` pipeline | ⏳ planned |
+| 5a    | Config + keys (`~/.config/webrecon/config.toml` + `WEBRECON_*` env) | ✅ done |
+| 5b    | `ipinfo` / `greynoise` / `abuseipdb` — IP enrichment | ✅ done |
+| 5c    | `subs` boost: VirusTotal + Censys cert sources | ✅ done |
+| 5d    | `cve` upgrade: Vulners preferred, NVD with API key | ✅ done |
+| 5e+   | Shodan / VT / Pulsedive / IntelX / Censys host + unified `recon` | ⏳ planned |
 
 ---
 
@@ -67,7 +71,36 @@ webrecon cve search nginx 1.18.0 --limit 10        # keyword search by product+v
 webrecon cve scan scanme.nmap.org                  # scan, fingerprint banners, fetch CVEs per service
 ```
 
-> **NVD rate limit:** without an API key, NVD allows ~5 requests per 30s. `cve scan` walks each open service serially to stay under the limit. Get a free key at https://nvd.nist.gov/developers/request-an-api-key if you hit limits often (config wiring TBD).
+> **NVD rate limit:** 5 requests / 30s without a key, 50 / 30s with one. `cve scan` walks services serially.
+
+---
+
+## Configuration
+
+Copy [configs/default.toml](configs/default.toml) to `~/.config/webrecon/config.toml` and fill in the keys you have. All keys are optional — modules that need a missing key say so.
+
+```bash
+mkdir -p ~/.config/webrecon
+cp configs/default.toml ~/.config/webrecon/config.toml
+${EDITOR:-vi} ~/.config/webrecon/config.toml
+webrecon config            # shows which keys are loaded
+```
+
+Environment variables override the file:
+
+```
+WEBRECON_SHODAN, WEBRECON_IPINFO, WEBRECON_PULSEDIVE, WEBRECON_VULNERS,
+WEBRECON_INTELX, WEBRECON_GREYNOISE, WEBRECON_VIRUSTOTAL, WEBRECON_OTX,
+WEBRECON_NVD, WEBRECON_ABUSEIPDB, WEBRECON_CENSYS_ID, WEBRECON_CENSYS_SECRET
+```
+
+### IP enrichment
+
+```bash
+webrecon ipinfo 8.8.8.8                # geo + ASN + org (needs ipinfo key)
+webrecon greynoise 45.83.66.21         # noise/riot classification (needs greynoise key)
+webrecon abuseipdb 185.220.100.255     # abuse score + recent reports (needs abuseipdb key)
+```
 
 ### Global flags
 

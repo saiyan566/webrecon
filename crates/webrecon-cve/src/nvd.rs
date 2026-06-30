@@ -15,9 +15,9 @@ pub struct CveSummary {
     pub references: Vec<String>,
 }
 
-pub async fn fetch_by_id(client: &Client, id: &str) -> Result<CveSummary> {
+pub async fn fetch_by_id(client: &Client, key: Option<&str>, id: &str) -> Result<CveSummary> {
     let url = format!("{}?cveId={}", NVD_BASE, id);
-    let body = http_get_json(client, &url).await?;
+    let body = http_get_json(client, key, &url).await?;
     let vulns = body.get("vulnerabilities").and_then(|v| v.as_array())
         .ok_or_else(|| WebreconError::Parse("nvd: no vulnerabilities".into()))?;
     let first = vulns.first()
@@ -26,7 +26,7 @@ pub async fn fetch_by_id(client: &Client, id: &str) -> Result<CveSummary> {
     Ok(parse_cve(cve))
 }
 
-pub async fn search(client: &Client, product: &str, version: Option<&str>, limit: usize) -> Result<Vec<CveSummary>> {
+pub async fn search(client: &Client, key: Option<&str>, product: &str, version: Option<&str>, limit: usize) -> Result<Vec<CveSummary>> {
     let mut q = product.to_string();
     if let Some(v) = version { q.push(' '); q.push_str(v); }
     let url = format!(
@@ -35,7 +35,7 @@ pub async fn search(client: &Client, product: &str, version: Option<&str>, limit
         urlencode(&q),
         limit.min(2000),
     );
-    let body = http_get_json(client, &url).await?;
+    let body = http_get_json(client, key, &url).await?;
     let vulns = body.get("vulnerabilities").and_then(|v| v.as_array())
         .ok_or_else(|| WebreconError::Parse("nvd: no vulnerabilities".into()))?;
     let mut out: Vec<CveSummary> = vulns.iter()
@@ -45,8 +45,10 @@ pub async fn search(client: &Client, product: &str, version: Option<&str>, limit
     Ok(out)
 }
 
-async fn http_get_json(client: &Client, url: &str) -> Result<Value> {
-    let resp = client.get(url).send().await
+async fn http_get_json(client: &Client, key: Option<&str>, url: &str) -> Result<Value> {
+    let mut req = client.get(url);
+    if let Some(k) = key { req = req.header("apiKey", k); }
+    let resp = req.send().await
         .map_err(|e| WebreconError::Network(e.to_string()))?;
     let status = resp.status();
     if !status.is_success() {
