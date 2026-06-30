@@ -1,7 +1,7 @@
 use crate::ui;
 use anyhow::Result;
 use webrecon_core::Config;
-use webrecon_intel::{http_client, shodan as shodan_mod, vt as vt_mod, pulsedive as pulse_mod, intelx as ix_mod, indicator_kind};
+use webrecon_intel::{http_client, shodan as shodan_mod, vt as vt_mod, pulsedive as pulse_mod, intelx as ix_mod, censys as censys_mod, indicator_kind};
 
 fn require_key(opt: Option<&str>, name: &str) -> Result<String> {
     opt.map(|s| s.to_string())
@@ -39,6 +39,36 @@ pub async fn shodan(ip: &str, timeout: u64, as_json: bool) -> Result<()> {
             let version = svc.get("version").and_then(|p| p.as_str()).unwrap_or("");
             let banner: String = svc.get("data").and_then(|b| b.as_str()).unwrap_or("").lines().next().unwrap_or("").chars().take(140).collect();
             ui::list_item(&format!("{:>5}/tcp  {} {}  {}", port, product, version, banner));
+        }
+    }
+    Ok(())
+}
+
+pub async fn censys(ip: &str, timeout: u64, as_json: bool) -> Result<()> {
+    let cfg = Config::load();
+    let id = require_key(cfg.keys.censys_api_id.as_deref(), "censys_api_id")?;
+    let secret = require_key(cfg.keys.censys_api_secret.as_deref(), "censys_api_secret")?;
+    let client = http_client(timeout);
+    let pb = if !as_json { Some(ui::spinner(&format!("censys host {ip}"))) } else { None };
+    let v = censys_mod::host(&client, &id, &secret, ip).await?;
+    if let Some(pb) = pb { pb.finish_and_clear(); }
+    if as_json { ui::print_json(&v); return Ok(()); }
+
+    ui::section(&format!("Censys — {ip}"));
+    for key in ["ip","last_updated_at","location","autonomous_system","dns","operating_system"] {
+        if let Some(val) = v.get(key) {
+            ui::kv(key, &ui::json_str(val));
+        }
+    }
+    if let Some(services) = v.get("services").and_then(|s| s.as_array()) {
+        ui::section("Services");
+        for svc in services {
+            let port = svc.get("port").and_then(|p| p.as_u64()).unwrap_or(0);
+            let name = svc.get("service_name").and_then(|n| n.as_str()).unwrap_or("?");
+            let proto = svc.get("transport_protocol").and_then(|p| p.as_str()).unwrap_or("");
+            let product = svc.pointer("/software/0/product").and_then(|p| p.as_str()).unwrap_or("");
+            let version = svc.pointer("/software/0/version").and_then(|p| p.as_str()).unwrap_or("");
+            ui::list_item(&format!("{:>5}/{}  {}  {} {}", port, proto, name, product, version));
         }
     }
     Ok(())

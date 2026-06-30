@@ -2,6 +2,7 @@ pub mod shodan;
 pub mod vt;
 pub mod pulsedive;
 pub mod intelx;
+pub mod censys;
 
 use reqwest::Client;
 use std::time::Duration;

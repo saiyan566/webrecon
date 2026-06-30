@@ -74,6 +74,33 @@ enum Cmd {
     },
     /// Shodan host lookup — open ports, banners, vulns (passive, no packets sent)
     Shodan { ip: String },
+    /// Censys host lookup — services + autonomous system + location
+    Censys { ip: String },
+    /// Unified recon: chains whois + asn + cidr + subs + ipinfo + shodan + vt (+ optional scan/cve)
+    Recon {
+        target: String,
+        /// Also TCP-scan resolved IP (top-100)
+        #[arg(long)]
+        scan: bool,
+        /// Run CVE lookup on banners from --scan (implies --scan)
+        #[arg(long)]
+        cve: bool,
+        /// Skip passive subdomain enumeration
+        #[arg(long)]
+        no_subs: bool,
+        /// Skip Shodan
+        #[arg(long)]
+        no_shodan: bool,
+        /// Skip VirusTotal
+        #[arg(long)]
+        no_vt: bool,
+        /// Skip IPinfo trio (ipinfo + greynoise + abuseipdb)
+        #[arg(long)]
+        no_ipinfo: bool,
+        /// Top-N ports if scanning
+        #[arg(long, default_value_t = 100)]
+        top: u16,
+    },
     /// VirusTotal v3 reputation for IP / domain / file hash
     Vt { indicator: String },
     /// Pulsedive risk score + threat tags for an indicator
@@ -150,6 +177,10 @@ async fn main() {
         Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
         Cmd::Ipinfo { ip, max_age } => commands::ipintel::run(ip, *max_age, cli.timeout, cli.json).await,
         Cmd::Shodan { ip } => commands::intel::shodan(ip, cli.timeout, cli.json).await,
+        Cmd::Censys { ip } => commands::intel::censys(ip, cli.timeout, cli.json).await,
+        Cmd::Recon { target, scan, cve, no_subs, no_shodan, no_vt, no_ipinfo, top } => {
+            commands::recon::run(target, *scan || *cve, *cve, *no_subs, *no_shodan, *no_vt, *no_ipinfo, *top, cli.timeout, cli.json).await
+        }
         Cmd::Vt { indicator } => commands::intel::vt(indicator, cli.timeout, cli.json).await,
         Cmd::Pulsedive { indicator } => commands::intel::pulsedive(indicator, cli.timeout, cli.json).await,
         Cmd::Intelx { term, limit } => commands::intel::intelx(term, *limit, cli.timeout, cli.json).await,

@@ -21,7 +21,8 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 | 5c    | `subs` boost: VirusTotal + Censys cert sources | ✅ done |
 | 5d    | `cve` upgrade: Vulners preferred, NVD with API key | ✅ done |
 | 5e+5f | `shodan` / `vt` / `pulsedive` / `intelx` — host + reputation + intel lookups | ✅ done |
-| 5g+5h | Unified `recon` pipeline + Censys host search | ⏳ planned |
+| 5g    | `recon` — unified pipeline chaining everything | ✅ done |
+| 5h    | `censys` — Censys host search | ✅ done |
 
 ---
 
@@ -119,7 +120,22 @@ webrecon vt 44d88612fea8a8f36de82e1278abb02f   # md5/sha1/sha256
 webrecon pulsedive evil.example.com        # risk score + threat tags
 webrecon intelx user@example.com           # leak/dark-web selector search
 webrecon intelx example.com --limit 50
+webrecon censys 1.1.1.1                    # services + autonomous system + location
 ```
+
+### Unified pipeline
+
+`webrecon recon <target>` chains it all: WHOIS → ASN → CIDR → subdomains → IP intel (IPinfo + GreyNoise + AbuseIPDB) → Shodan → VirusTotal. Optionally add `--scan` for a TCP scan, `--cve` to also pull CVEs from banners.
+
+```bash
+webrecon recon example.com                 # passive only (recommended starting point)
+webrecon recon example.com --scan          # + top-100 TCP scan with banners
+webrecon recon example.com --scan --cve    # full pipeline including CVE lookup per service
+webrecon recon 1.1.1.1 --no-vt --no-shodan # IP-only quick recon
+webrecon recon target.com --json > out.json
+```
+
+Skip flags: `--no-subs`, `--no-shodan`, `--no-vt`, `--no-ipinfo`. Missing keys are auto-skipped (not errors).
 
 ### Global flags
 
