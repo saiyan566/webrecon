@@ -1,6 +1,7 @@
 pub mod rdap;
 pub mod cymru;
 pub mod ripestat;
+pub mod bgpview;
 
 use reqwest::Client;
 use std::time::Duration;

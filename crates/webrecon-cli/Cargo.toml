@@ -26,3 +26,4 @@ indicatif = { workspace = true }
 anyhow = { workspace = true }
 trust-dns-resolver = { workspace = true }
 ipnet = { workspace = true }
+futures = { workspace = true }

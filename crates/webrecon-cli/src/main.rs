@@ -136,19 +136,44 @@ EXAMPLES
 ")]
     Whois { target: String },
 
-    /// ASN info for an ASN, IP, or domain
+    /// ASN info — ASN/IP/domain lookup, org search, or deep subdomain sweep
     #[command(long_about = "\
-Resolves an ASN from a Team Cymru DNS lookup. Accepts:
-  - ASN: \"AS15169\" or \"15169\" → returns AS name
-  - IP:  \"8.8.8.8\"            → returns owning ASN + prefix + country
-  - Domain: \"example.com\"     → resolves A/AAAA, then ASN per IP
+Resolve ASNs three ways:
+
+  default      ASN / IP / domain → Team Cymru DNS lookup
+                 - \"AS15169\" or \"15169\"  → AS name
+                 - \"8.8.8.8\"               → owning ASN + prefix + country
+                 - \"cloudflare.com\"        → A/AAAA → ASN per IP
+
+  --search     Treat <target> as an org / keyword and query BGPView. Returns
+               every ASN whose name or description matches (e.g. \"nvidia\"
+               returns NVIDIA's own ASNs across continents). Best way to find
+               every ASN a large org actually owns.
+
+  --deep       Enumerate passive subdomains for <target>, resolve each, and
+               aggregate every unique ASN observed. Reveals every cloud/CDN/
+               own-infra provider the domain touches (often 5–20 ASNs for a
+               big org).
 
 EXAMPLES
   webrecon asn 8.8.8.8
   webrecon asn AS15169
   webrecon asn cloudflare.com
+  webrecon asn nvidia --search             # all NVIDIA-owned ASNs
+  webrecon asn nvidia.com --deep           # every ASN their subdomains touch
 ")]
-    Asn { target: String },
+    Asn {
+        target: String,
+        /// Org/keyword search via BGPView (treat target as a query term)
+        #[arg(long)]
+        search: bool,
+        /// Enumerate subdomains, resolve each, aggregate unique ASNs
+        #[arg(long)]
+        deep: bool,
+        /// Concurrent DNS resolutions in --deep mode
+        #[arg(long, default_value_t = 50)]
+        concurrency: usize,
+    },
 
     /// Announced CIDR prefixes for an ASN (RIPEstat)
     #[command(long_about = "\
@@ -452,7 +477,9 @@ async fn main() {
 
     let result = match &cli.cmd {
         Cmd::Whois { target } => commands::whois::run(target, cli.timeout, cli.json).await,
-        Cmd::Asn { target } => commands::asn::run(target, cli.timeout, cli.json).await,
+        Cmd::Asn { target, search, deep, concurrency } => {
+            commands::asn::run(target, *search, *deep, *concurrency, cli.timeout, cli.json).await
+        }
         Cmd::Cidr { target } => commands::cidr::run(target, cli.timeout, cli.json).await,
         Cmd::Subs { target, no_passive, active, wordlist, concurrency } => {
             commands::subs::run(target, *no_passive, *active, wordlist.as_deref(), *concurrency, cli.timeout, cli.json).await
