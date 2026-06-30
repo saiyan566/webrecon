@@ -20,9 +20,33 @@ pub async fn run(ip: &str, max_age: u32, timeout: u64, as_json: bool) -> Result<
     } else { None };
 
     let (ipinfo_o, greynoise_o, abuse_o) = tokio::join!(
-        run_or_skip(cfg.keys.ipinfo.as_deref(), |k| ipinfo_mod::lookup(&client, k, ip)),
-        run_or_skip(cfg.keys.greynoise.as_deref(), |k| gn_mod::lookup(&client, k, ip)),
-        run_or_skip(cfg.keys.abuseipdb.as_deref(), |k| abuse_mod::lookup(&client, k, ip, max_age)),
+        async {
+            match cfg.keys.ipinfo.as_deref() {
+                None => Outcome::Missing,
+                Some(k) => match ipinfo_mod::lookup(&client, k, ip).await {
+                    Ok(v) => Outcome::Hit(v),
+                    Err(e) => Outcome::Err(e.to_string()),
+                },
+            }
+        },
+        async {
+            match cfg.keys.greynoise.as_deref() {
+                None => Outcome::Missing,
+                Some(k) => match gn_mod::lookup(&client, k, ip).await {
+                    Ok(v) => Outcome::Hit(v),
+                    Err(e) => Outcome::Err(e.to_string()),
+                },
+            }
+        },
+        async {
+            match cfg.keys.abuseipdb.as_deref() {
+                None => Outcome::Missing,
+                Some(k) => match abuse_mod::lookup(&client, k, ip, max_age).await {
+                    Ok(v) => Outcome::Hit(v),
+                    Err(e) => Outcome::Err(e.to_string()),
+                },
+            }
+        },
     );
 
     if let Some(pb) = pb { pb.finish_and_clear(); }
@@ -41,20 +65,6 @@ pub async fn run(ip: &str, max_age: u32, timeout: u64, as_json: bool) -> Result<
     render_greynoise(&greynoise_o);
     render_abuseipdb(&abuse_o);
     Ok(())
-}
-
-async fn run_or_skip<F, Fut>(key: Option<&str>, f: F) -> Outcome
-where
-    F: FnOnce(&str) -> Fut,
-    Fut: std::future::Future<Output = webrecon_core::Result<Value>>,
-{
-    match key {
-        None => Outcome::Missing,
-        Some(k) => match f(k).await {
-            Ok(v) => Outcome::Hit(v),
-            Err(e) => Outcome::Err(e.to_string()),
-        },
-    }
 }
 
 fn outcome_to_json(o: &Outcome) -> Value {
