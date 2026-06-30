@@ -1,5 +1,5 @@
 use indicatif::{ProgressBar, ProgressStyle};
-use owo_colors::{OwoColorize, Stream, set_override};
+use owo_colors::{OwoColorize, Stream, Style, set_override};
 use serde_json::Value;
 use std::time::Duration;
 
@@ -18,9 +18,10 @@ pub fn banner() {
    \_/\_/ \___|_.__/|_|  \___|\___\___/|_| |_|
 "#;
     eprintln!("{}", art.if_supports_color(Stream::Stderr, |s| s.bright_cyan()));
+    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
     eprintln!("  {} {}\n",
         "personal recon toolkit".if_supports_color(Stream::Stderr, |s| s.bright_white()),
-        format!("v{}", env!("CARGO_PKG_VERSION")).if_supports_color(Stream::Stderr, |s| s.dimmed()),
+        version.if_supports_color(Stream::Stderr, |s| s.style(Style::new().dimmed())),
     );
 }
 
@@ -28,7 +29,7 @@ pub fn section(title: &str) {
     println!();
     println!("{} {}",
         "▸".if_supports_color(Stream::Stdout, |s| s.bright_magenta()),
-        title.if_supports_color(Stream::Stdout, |s| s.bright_white().bold()),
+        title.if_supports_color(Stream::Stdout, |s| s.style(Style::new().bright_white().bold())),
     );
     println!("{}", "─".repeat(60).if_supports_color(Stream::Stdout, |s| s.bright_black()));
 }
@@ -37,8 +38,9 @@ pub fn kv(key: &str, value: &str) {
     if value.is_empty() || value == "null" {
         return;
     }
+    let label = format!("{}:", key);
     println!("  {:<16} {}",
-        format!("{}:", key).if_supports_color(Stream::Stdout, |s| s.bright_cyan()),
+        label.if_supports_color(Stream::Stdout, |s| s.bright_cyan()),
         value,
     );
 }
@@ -59,7 +61,7 @@ pub fn info(msg: &str) {
 
 pub fn error(msg: &str) {
     eprintln!("{} {}",
-        "[!]".if_supports_color(Stream::Stderr, |s| s.bright_red().bold()),
+        "[!]".if_supports_color(Stream::Stderr, |s| s.style(Style::new().bright_red().bold())),
         msg,
     );
 }
