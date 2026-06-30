@@ -1,0 +1,17 @@
+# webrecon default configuration
+# Copy to ~/.config/webrecon/config.toml and fill in keys as you add modules.
+
+[http]
+timeout_secs = 15
+retries = 1
+user_agent = "webrecon/0.1"
+
+[keys]
+# Reserved for later phases — leave empty until those modules land.
+shodan = ""
+securitytrails = ""
+virustotal = ""
+nvd_api = ""
+
+[output]
+color = "auto"   # auto | always | never
