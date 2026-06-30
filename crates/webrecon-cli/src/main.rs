@@ -24,6 +24,35 @@ struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+enum CveAction {
+    /// Look up a single CVE by ID (e.g. CVE-2021-44228)
+    Id { id: String },
+    /// Keyword search by product (and optional version)
+    Search {
+        product: String,
+        version: Option<String>,
+        /// Max results to fetch
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Scan host → fingerprint banners → query CVEs per service
+    Scan {
+        target: String,
+        #[arg(long)]
+        ports: Option<String>,
+        #[arg(long, default_value_t = 100)]
+        top: u16,
+        #[arg(long, default_value_t = 500)]
+        concurrency: usize,
+        #[arg(long, default_value_t = 1500)]
+        connect_timeout: u64,
+        /// CVEs to show per fingerprinted service
+        #[arg(long, default_value_t = 5)]
+        limit: usize,
+    },
+}
+
+#[derive(Subcommand, Debug)]
 enum Cmd {
     /// RDAP / whois lookup for a domain or IP
     Whois { target: String },
@@ -31,6 +60,11 @@ enum Cmd {
     Asn { target: String },
     /// Announced CIDR prefixes for an ASN
     Cidr { target: String },
+    /// CVE lookup — by ID, keyword search, or chained scan→fingerprint→CVE
+    Cve {
+        #[command(subcommand)]
+        action: CveAction,
+    },
     /// TCP connect port scan (host/IP/CIDR) with optional banner grab
     Scan {
         /// host, IP, or CIDR (e.g. example.com / 1.2.3.4 / 10.0.0.0/28)
@@ -92,6 +126,7 @@ async fn main() {
         Cmd::Scan { target, ports, top, concurrency, connect_timeout, no_banner, max_hosts } => {
             commands::scan::run(target, ports.as_deref(), *top, *concurrency, *connect_timeout, *no_banner, *max_hosts, cli.json).await
         }
+        Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
     };
 
     if let Err(e) = result {

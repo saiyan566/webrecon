@@ -15,7 +15,7 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 | 2     | `subs` — subdomain enum (passive crt.sh/OTX/HackerTarget + active brute force) | ✅ done |
 | 3     | `scan` — TCP connect port scanner + banner grab (top-100 / top-1000 / custom) | ✅ done |
 | 3.5   | SYN scan (raw sockets, root)                | ⏳ planned |
-| 4     | CVE lookup (NVD / CIRCL)                    | ⏳ planned |
+| 4     | `cve` — NVD lookup by ID, keyword search, or scan→fingerprint→CVE chain | ✅ done |
 | 5     | HTTP fingerprinting + unified `recon` pipeline | ⏳ planned |
 
 ---
@@ -61,7 +61,13 @@ webrecon scan scanme.nmap.org              # top-100 ports, banner grab
 webrecon scan 1.1.1.1 --top 1000           # top-1000 ports
 webrecon scan target.com --ports 22,80,443,8000-8100
 webrecon scan 10.0.0.0/28 --no-banner --concurrency 1000
+
+webrecon cve id CVE-2021-44228                     # single CVE lookup
+webrecon cve search nginx 1.18.0 --limit 10        # keyword search by product+version
+webrecon cve scan scanme.nmap.org                  # scan, fingerprint banners, fetch CVEs per service
 ```
+
+> **NVD rate limit:** without an API key, NVD allows ~5 requests per 30s. `cve scan` walks each open service serially to stay under the limit. Get a free key at https://nvd.nist.gov/developers/request-an-api-key if you hit limits often (config wiring TBD).
 
 ### Global flags
 

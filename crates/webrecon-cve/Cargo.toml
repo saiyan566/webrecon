@@ -1,0 +1,14 @@
+[package]
+name = "webrecon-cve"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+webrecon-core = { path = "../webrecon-core" }
+webrecon-portscan = { path = "../webrecon-portscan" }
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }

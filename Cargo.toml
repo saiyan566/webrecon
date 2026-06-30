@@ -6,6 +6,7 @@ members = [
     "crates/webrecon-whois",
     "crates/webrecon-subdomains",
     "crates/webrecon-portscan",
+    "crates/webrecon-cve",
 ]
 
 [workspace.package]
