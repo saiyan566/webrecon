@@ -1,7 +1,7 @@
 use crate::ui;
 use anyhow::Result;
 use webrecon_core::Config;
-use webrecon_intel::{http_client, shodan as shodan_mod, vt as vt_mod, pulsedive as pulse_mod, intelx as ix_mod, censys as censys_mod, indicator_kind};
+use webrecon_intel::{http_client, shodan as shodan_mod, vt as vt_mod, pulsedive as pulse_mod, intelx as ix_mod, censys as censys_mod, github as gh_mod, indicator_kind};
 
 fn require_key(opt: Option<&str>, name: &str) -> Result<String> {
     opt.map(|s| s.to_string())
@@ -46,11 +46,10 @@ pub async fn shodan(ip: &str, timeout: u64, as_json: bool) -> Result<()> {
 
 pub async fn censys(ip: &str, timeout: u64, as_json: bool) -> Result<()> {
     let cfg = Config::load();
-    let id = require_key(cfg.keys.censys_api_id.as_deref(), "censys_api_id")?;
-    let secret = require_key(cfg.keys.censys_api_secret.as_deref(), "censys_api_secret")?;
+    let token = require_key(cfg.keys.censys.as_deref(), "censys")?;
     let client = http_client(timeout);
     let pb = if !as_json { Some(ui::spinner(&format!("censys host {ip}"))) } else { None };
-    let v = censys_mod::host(&client, &id, &secret, ip).await?;
+    let v = censys_mod::host(&client, &token, ip).await?;
     if let Some(pb) = pb { pb.finish_and_clear(); }
     if as_json { ui::print_json(&v); return Ok(()); }
 
@@ -70,6 +69,50 @@ pub async fn censys(ip: &str, timeout: u64, as_json: bool) -> Result<()> {
             let version = svc.pointer("/software/0/version").and_then(|p| p.as_str()).unwrap_or("");
             ui::list_item(&format!("{:>5}/{}  {}  {} {}", port, proto, name, product, version));
         }
+    }
+    Ok(())
+}
+
+pub async fn github(name: &str, repos_limit: usize, timeout: u64, as_json: bool) -> Result<()> {
+    let cfg = Config::load();
+    let token = cfg.keys.github.clone();
+    let client = http_client(timeout);
+    let pb = if !as_json { Some(ui::spinner(&format!("github user {name}"))) } else { None };
+    let user = gh_mod::user(&client, token.as_deref(), name).await?;
+    let repos = gh_mod::repos(&client, token.as_deref(), name, repos_limit).await.unwrap_or_default();
+    if let Some(pb) = pb { pb.finish_and_clear(); }
+
+    if as_json {
+        ui::print_json(&serde_json::json!({
+            "user": user, "repos": repos,
+        }));
+        return Ok(());
+    }
+
+    let kind = user.get("type").and_then(|v| v.as_str()).unwrap_or("?");
+    ui::section(&format!("GitHub — {name} ({kind})"));
+    for k in ["login","name","company","blog","location","email","bio","twitter_username","public_repos","public_gists","followers","following","created_at","updated_at","html_url"] {
+        if let Some(val) = user.get(k) {
+            let s = ui::json_str(val);
+            if !s.is_empty() && s != "null" { ui::kv(k, &s); }
+        }
+    }
+
+    if !repos.is_empty() {
+        ui::section(&format!("Repos (showing {} of {})", repos.len(), user.get("public_repos").and_then(|v| v.as_u64()).unwrap_or(repos.len() as u64)));
+        for r in repos.iter().take(repos_limit) {
+            let name = r.get("name").and_then(|x| x.as_str()).unwrap_or("?");
+            let lang = r.get("language").and_then(|x| x.as_str()).unwrap_or("-");
+            let stars = r.get("stargazers_count").and_then(|x| x.as_u64()).unwrap_or(0);
+            let forks = r.get("forks_count").and_then(|x| x.as_u64()).unwrap_or(0);
+            let pushed = r.get("pushed_at").and_then(|x| x.as_str()).unwrap_or("");
+            let desc: String = r.get("description").and_then(|x| x.as_str()).unwrap_or("").chars().take(80).collect();
+            ui::list_item(&format!("{:<28} {:<10} ★{:<5} ⑂{:<4} {}  {}", name, lang, stars, forks, pushed, desc));
+        }
+    }
+
+    if token.is_none() {
+        ui::info("no github token configured — using unauthenticated 60 req/hr limit. Set `github` in config to raise it.");
     }
     Ok(())
 }

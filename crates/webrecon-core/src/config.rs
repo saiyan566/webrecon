@@ -19,8 +19,8 @@ pub struct Keys {
     pub otx: Option<String>,
     pub nvd: Option<String>,
     pub abuseipdb: Option<String>,
-    pub censys_api_id: Option<String>,
-    pub censys_api_secret: Option<String>,
+    pub censys: Option<String>,
+    pub github: Option<String>,
 }
 
 impl Config {
@@ -49,8 +49,8 @@ impl Config {
         if let Some(v) = pick("WEBRECON_OTX")           { self.keys.otx = Some(v); }
         if let Some(v) = pick("WEBRECON_NVD")           { self.keys.nvd = Some(v); }
         if let Some(v) = pick("WEBRECON_ABUSEIPDB")     { self.keys.abuseipdb = Some(v); }
-        if let Some(v) = pick("WEBRECON_CENSYS_ID")     { self.keys.censys_api_id = Some(v); }
-        if let Some(v) = pick("WEBRECON_CENSYS_SECRET") { self.keys.censys_api_secret = Some(v); }
+        if let Some(v) = pick("WEBRECON_CENSYS")        { self.keys.censys = Some(v); }
+        if let Some(v) = pick("WEBRECON_GITHUB")        { self.keys.github = Some(v); }
     }
 }
 

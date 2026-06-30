@@ -17,8 +17,8 @@ pub fn run(as_json: bool) -> Result<()> {
         ("otx", cfg.keys.otx.as_ref()),
         ("nvd", cfg.keys.nvd.as_ref()),
         ("abuseipdb", cfg.keys.abuseipdb.as_ref()),
-        ("censys_api_id", cfg.keys.censys_api_id.as_ref()),
-        ("censys_api_secret", cfg.keys.censys_api_secret.as_ref()),
+        ("censys", cfg.keys.censys.as_ref()),
+        ("github", cfg.keys.github.as_ref()),
     ];
 
     if as_json {

@@ -3,6 +3,7 @@ pub mod vt;
 pub mod pulsedive;
 pub mod intelx;
 pub mod censys;
+pub mod github;
 
 use reqwest::Client;
 use std::time::Duration;

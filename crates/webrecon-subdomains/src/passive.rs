@@ -1,4 +1,3 @@
-use base64::Engine;
 use reqwest::Client;
 use serde_json::Value;
 use webrecon_core::{Keys, Result, WebreconError};
@@ -31,9 +30,9 @@ pub async fn run_all(client: &Client, domain: &str, keys: &Keys) -> Vec<SourceRe
             }
         },
         async {
-            match (keys.censys_api_id.as_deref(), keys.censys_api_secret.as_deref()) {
-                (Some(id), Some(secret)) => censys_certs(client, id, secret, domain).await,
-                _ => Err(WebreconError::NotFound("no censys keys".into())),
+            match keys.censys.as_deref() {
+                Some(token) => censys_certs(client, token, domain).await,
+                None => Err(WebreconError::NotFound("no censys key".into())),
             }
         },
     );
@@ -147,14 +146,13 @@ pub async fn virustotal(client: &Client, key: &str, domain: &str) -> Result<Vec<
     Ok(out)
 }
 
-pub async fn censys_certs(client: &Client, id: &str, secret: &str, domain: &str) -> Result<Vec<String>> {
-    let token = base64::engine::general_purpose::STANDARD.encode(format!("{}:{}", id, secret));
+pub async fn censys_certs(client: &Client, token: &str, domain: &str) -> Result<Vec<String>> {
     let body = serde_json::json!({
         "q": format!("names: {}", domain),
         "per_page": 100,
     });
     let resp = client.post("https://search.censys.io/api/v2/certificates/search")
-        .header("Authorization", format!("Basic {}", token))
+        .bearer_auth(token)
         .header("Content-Type", "application/json")
         .json(&body)
         .send().await

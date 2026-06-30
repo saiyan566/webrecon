@@ -93,7 +93,7 @@ Environment variables override the file:
 ```
 WEBRECON_SHODAN, WEBRECON_IPINFO, WEBRECON_PULSEDIVE, WEBRECON_VULNERS,
 WEBRECON_INTELX, WEBRECON_GREYNOISE, WEBRECON_VIRUSTOTAL, WEBRECON_OTX,
-WEBRECON_NVD, WEBRECON_ABUSEIPDB, WEBRECON_CENSYS_ID, WEBRECON_CENSYS_SECRET
+WEBRECON_NVD, WEBRECON_ABUSEIPDB, WEBRECON_CENSYS, WEBRECON_GITHUB
 ```
 
 ### IP enrichment
@@ -121,7 +121,12 @@ webrecon pulsedive evil.example.com        # risk score + threat tags
 webrecon intelx user@example.com           # leak/dark-web selector search
 webrecon intelx example.com --limit 50
 webrecon censys 1.1.1.1                    # services + autonomous system + location
+webrecon github torvalds                   # GitHub user/org profile + repos
+webrecon github saiyan566 --repos 50
 ```
+
+> **Censys auth changed:** the new API uses a single Personal Access Token (Bearer auth). The old `censys_api_id` + `censys_api_secret` are gone — replace with a single `censys` field.
+> **GitHub:** key is optional but recommended — unauth is 60 req/hr, authed is 5000 req/hr.
 
 ### Unified pipeline
 
