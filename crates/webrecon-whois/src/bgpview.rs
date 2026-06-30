@@ -7,8 +7,9 @@ pub async fn search(client: &Client, query: &str) -> Result<Value> {
     let url = format!("https://api.bgpview.io/search?query_term={}", urlencode(query));
     let resp = client.get(&url)
         .header("Accept", "application/json")
+        .header("User-Agent", "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
         .send().await
-        .map_err(|e| WebreconError::Network(format!("bgpview connect failed ({e}) — try: curl -v {url}")))?;
+        .map_err(|e| WebreconError::Network(format!("bgpview connect failed ({e}) — try: curl -v '{url}'")))?;
     let status = resp.status();
     if !status.is_success() {
         return Err(WebreconError::Network(format!("bgpview -> {status}")));

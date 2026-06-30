@@ -124,9 +124,10 @@ async fn bgpview_search(query: &str, timeout: u64, as_json: bool) -> Result<()> 
 }
 
 async fn deep_sweep(target: &str, concurrency: usize, timeout: u64, as_json: bool) -> Result<()> {
-    let domain = match Target::parse(target)? {
-        Target::Domain(d) => d,
-        _ => anyhow::bail!("--deep requires a domain target"),
+    let domain = match Target::parse(target) {
+        Ok(Target::Domain(d)) => d,
+        Ok(_) => anyhow::bail!("--deep needs a domain (e.g. google.com), not an IP/ASN/CIDR"),
+        Err(_) => anyhow::bail!("--deep needs a full domain like 'google.com', not just '{target}'. Add the TLD."),
     };
     let cfg = Config::load();
 
