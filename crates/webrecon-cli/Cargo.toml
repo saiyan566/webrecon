@@ -15,6 +15,7 @@ webrecon-subdomains = { path = "../webrecon-subdomains" }
 webrecon-portscan = { path = "../webrecon-portscan" }
 webrecon-cve = { path = "../webrecon-cve" }
 webrecon-ipintel = { path = "../webrecon-ipintel" }
+webrecon-intel = { path = "../webrecon-intel" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }

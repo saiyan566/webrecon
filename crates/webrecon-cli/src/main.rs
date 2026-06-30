@@ -72,6 +72,18 @@ enum Cmd {
         #[arg(long, default_value_t = 90)]
         max_age: u32,
     },
+    /// Shodan host lookup — open ports, banners, vulns (passive, no packets sent)
+    Shodan { ip: String },
+    /// VirusTotal v3 reputation for IP / domain / file hash
+    Vt { indicator: String },
+    /// Pulsedive risk score + threat tags for an indicator
+    Pulsedive { indicator: String },
+    /// IntelligenceX search by selector (email, domain, btc, hash, URL, …)
+    Intelx {
+        term: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
     /// Show resolved config: where keys are loaded from and which are present
     Config,
     /// TCP connect port scan (host/IP/CIDR) with optional banner grab
@@ -137,6 +149,10 @@ async fn main() {
         }
         Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
         Cmd::Ipinfo { ip, max_age } => commands::ipintel::run(ip, *max_age, cli.timeout, cli.json).await,
+        Cmd::Shodan { ip } => commands::intel::shodan(ip, cli.timeout, cli.json).await,
+        Cmd::Vt { indicator } => commands::intel::vt(indicator, cli.timeout, cli.json).await,
+        Cmd::Pulsedive { indicator } => commands::intel::pulsedive(indicator, cli.timeout, cli.json).await,
+        Cmd::Intelx { term, limit } => commands::intel::intelx(term, *limit, cli.timeout, cli.json).await,
         Cmd::Config => commands::config_show::run(cli.json),
     };
 

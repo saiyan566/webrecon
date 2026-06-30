@@ -20,7 +20,8 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 | 5b    | `ipinfo` — unified IP intel (IPinfo + GreyNoise + AbuseIPDB in parallel) | ✅ done |
 | 5c    | `subs` boost: VirusTotal + Censys cert sources | ✅ done |
 | 5d    | `cve` upgrade: Vulners preferred, NVD with API key | ✅ done |
-| 5e+   | Shodan / VT / Pulsedive / IntelX / Censys host + unified `recon` | ⏳ planned |
+| 5e+5f | `shodan` / `vt` / `pulsedive` / `intelx` — host + reputation + intel lookups | ✅ done |
+| 5g+5h | Unified `recon` pipeline + Censys host search | ⏳ planned |
 
 ---
 
@@ -106,6 +107,18 @@ WEBRECON_NVD, WEBRECON_ABUSEIPDB, WEBRECON_CENSYS_ID, WEBRECON_CENSYS_SECRET
 webrecon ipinfo 8.8.8.8
 webrecon ipinfo 185.220.100.255 --max-age 30   # narrow abuse report window
 webrecon ipinfo 1.1.1.1 --json
+```
+
+### Host + reputation + intel lookups
+
+```bash
+webrecon shodan 1.1.1.1                    # passive host facts: ports, banners, vulns
+webrecon vt example.com                    # VirusTotal v3 (auto-routes IP/domain/hash)
+webrecon vt 8.8.8.8
+webrecon vt 44d88612fea8a8f36de82e1278abb02f   # md5/sha1/sha256
+webrecon pulsedive evil.example.com        # risk score + threat tags
+webrecon intelx user@example.com           # leak/dark-web selector search
+webrecon intelx example.com --limit 50
 ```
 
 ### Global flags

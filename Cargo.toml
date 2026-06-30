@@ -8,6 +8,7 @@ members = [
     "crates/webrecon-portscan",
     "crates/webrecon-cve",
     "crates/webrecon-ipintel",
+    "crates/webrecon-intel",
 ]
 
 [workspace.package]
