@@ -1,23 +1,15 @@
 [package]
-name = "webrecon-cli"
+name = "webrecon-subdomains"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
-[[bin]]
-name = "webrecon"
-path = "src/main.rs"
-
 [dependencies]
 webrecon-core = { path = "../webrecon-core" }
-webrecon-whois = { path = "../webrecon-whois" }
-webrecon-subdomains = { path = "../webrecon-subdomains" }
 tokio = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-clap = { workspace = true }
-owo-colors = { workspace = true }
-indicatif = { workspace = true }
-anyhow = { workspace = true }
 trust-dns-resolver = { workspace = true }
+anyhow = { workspace = true }
+futures = { workspace = true }

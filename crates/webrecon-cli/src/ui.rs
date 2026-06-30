@@ -88,6 +88,13 @@ pub fn json_str(v: &Value) -> String {
         Value::String(s) => s.clone(),
         Value::Number(n) => n.to_string(),
         Value::Bool(b) => b.to_string(),
+        Value::Array(arr) => arr.iter()
+            .map(|x| match x {
+                Value::String(s) => s.clone(),
+                other => other.to_string(),
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
         other => other.to_string(),
     }
 }

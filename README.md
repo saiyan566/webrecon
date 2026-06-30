@@ -12,7 +12,7 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 |-------|---------------------------------------------|--------|
 | 0     | Workspace scaffold, CLI, colored UI         | ✅ done |
 | 1     | `whois` (RDAP), `asn` (Cymru), `cidr` (RIPEstat) | ✅ done |
-| 2     | Subdomain enum (passive + active)           | ⏳ planned |
+| 2     | `subs` — subdomain enum (passive crt.sh/OTX/HackerTarget + active brute force) | ✅ done |
 | 3     | Port scanner (TCP connect + SYN) + banners  | ⏳ planned |
 | 4     | CVE lookup (NVD / CIRCL)                    | ⏳ planned |
 | 5     | HTTP fingerprinting + unified `recon` pipeline | ⏳ planned |
@@ -24,7 +24,7 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 Requires Rust 1.75+.
 
 ```bash
-git clone https://github.com/thedst22/webrecon
+git clone https://github.com/saiyan566/webrecon
 cd webrecon
 cargo build --release
 # Binary at: target/release/webrecon
@@ -50,6 +50,11 @@ webrecon asn example.com       # resolves, then ASN per IP
 webrecon asn AS15169           # ASN -> AS name
 
 webrecon cidr AS15169          # announced prefixes (v4 + v6)
+
+webrecon subs example.com                 # passive only
+webrecon subs example.com --active        # + brute force with embedded wordlist
+webrecon subs example.com --active --wordlist /path/to/list.txt --concurrency 100
+webrecon subs example.com --no-passive --active   # active only
 ```
 
 ### Global flags

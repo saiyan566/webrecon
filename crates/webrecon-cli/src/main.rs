@@ -31,6 +31,23 @@ enum Cmd {
     Asn { target: String },
     /// Announced CIDR prefixes for an ASN
     Cidr { target: String },
+    /// Enumerate subdomains (passive + optional active brute force)
+    Subs {
+        /// Apex domain (e.g. example.com)
+        target: String,
+        /// Disable passive sources (crt.sh / OTX / HackerTarget)
+        #[arg(long)]
+        no_passive: bool,
+        /// Enable active DNS brute force
+        #[arg(long)]
+        active: bool,
+        /// Custom wordlist path (one entry per line). Defaults to embedded list.
+        #[arg(long)]
+        wordlist: Option<std::path::PathBuf>,
+        /// Concurrent DNS resolutions for active brute force
+        #[arg(long, default_value_t = 50)]
+        concurrency: usize,
+    },
 }
 
 #[tokio::main]
@@ -46,6 +63,9 @@ async fn main() {
         Cmd::Whois { target } => commands::whois::run(target, cli.timeout, cli.json).await,
         Cmd::Asn { target } => commands::asn::run(target, cli.timeout, cli.json).await,
         Cmd::Cidr { target } => commands::cidr::run(target, cli.timeout, cli.json).await,
+        Cmd::Subs { target, no_passive, active, wordlist, concurrency } => {
+            commands::subs::run(target, *no_passive, *active, wordlist.as_deref(), *concurrency, cli.timeout, cli.json).await
+        }
     };
 
     if let Err(e) = result {

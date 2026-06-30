@@ -4,14 +4,15 @@ members = [
     "crates/webrecon-cli",
     "crates/webrecon-core",
     "crates/webrecon-whois",
+    "crates/webrecon-subdomains",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["thedst22"]
+authors = ["saiyan566"]
 license = "MIT"
-repository = "https://github.com/thedst22/webrecon"
+repository = "https://github.com/saiyan566/webrecon"
 rust-version = "1.75"
 
 [workspace.dependencies]
@@ -27,3 +28,4 @@ indicatif = "0.17"
 trust-dns-resolver = "0.23"
 ipnet = "2.9"
 url = "2.5"
+futures = "0.3"
