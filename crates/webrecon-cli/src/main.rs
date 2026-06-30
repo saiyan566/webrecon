@@ -145,10 +145,10 @@ Resolve ASNs three ways:
                  - \"8.8.8.8\"               → owning ASN + prefix + country
                  - \"cloudflare.com\"        → A/AAAA → ASN per IP
 
-  --search     Treat <target> as an org / keyword and query BGPView. Returns
-               every ASN whose name or description matches (e.g. \"nvidia\"
-               returns NVIDIA's own ASNs across continents). Best way to find
-               every ASN a large org actually owns.
+  --search     Treat <target> as an org / keyword and search public registries
+               (PeeringDB primary, RIPEstat fallback). Returns every ASN whose
+               name matches. Best way to find every ASN a large org owns.
+               Tip: pass a short brand (\"nvidia\"), not a domain (\"nvidia.com\").
 
   --deep       Enumerate passive subdomains for <target>, resolve each, and
                aggregate every unique ASN observed. Reveals every cloud/CDN/

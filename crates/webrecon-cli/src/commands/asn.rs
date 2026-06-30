@@ -8,7 +8,7 @@ use tokio::sync::Semaphore;
 use trust_dns_resolver::TokioAsyncResolver;
 use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
 use webrecon_core::{Config, Finding, Target};
-use webrecon_whois::{bgpview, cymru, http_client};
+use webrecon_whois::{asn_search, cymru, http_client};
 use webrecon_subdomains::{dedupe, http_client as subs_client, passive as sub_passive};
 
 pub async fn run(
@@ -79,46 +79,30 @@ async fn classic(target: &str, as_json: bool) -> Result<()> {
 
 async fn bgpview_search(query: &str, timeout: u64, as_json: bool) -> Result<()> {
     let client = http_client(timeout.max(30));
-    let pb = if !as_json { Some(ui::spinner(&format!("BGPView search: {query}"))) } else { None };
-    let data = bgpview::search(&client, query).await?;
+    let pb = if !as_json { Some(ui::spinner(&format!("ASN search: {query} (PeeringDB → RIPEstat)"))) } else { None };
+    let result = asn_search::search(&client, query).await?;
     if let Some(pb) = pb { pb.finish_and_clear(); }
 
     if as_json {
-        ui::print_json(&data);
+        ui::print_json(&serde_json::to_value(&result)?);
         return Ok(());
     }
 
-    let asns = data.get("asns").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    let v4 = data.get("ipv4_prefixes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-    let v6 = data.get("ipv6_prefixes").and_then(|v| v.as_array()).cloned().unwrap_or_default();
-
-    ui::section(&format!("BGPView search — \"{query}\""));
-    ui::kv("asns_matched", &asns.len().to_string());
-    ui::kv("ipv4_prefixes_matched", &v4.len().to_string());
-    ui::kv("ipv6_prefixes_matched", &v6.len().to_string());
-
-    if !asns.is_empty() {
-        ui::section("ASNs");
-        for a in asns.iter().take(50) {
-            let n = a.get("asn").and_then(|x| x.as_u64()).unwrap_or(0);
-            let name = a.get("name").and_then(|x| x.as_str()).unwrap_or("");
-            let desc = a.get("description").and_then(|x| x.as_str()).unwrap_or("");
-            let cc = a.get("country_code").and_then(|x| x.as_str()).unwrap_or("");
-            ui::list_item(&format!("AS{:<8} [{:<2}] {:<30} {}", n, cc, name, desc));
-        }
-        if asns.len() > 50 {
-            ui::info(&format!("(+{} more ASNs in --json)", asns.len() - 50));
-        }
+    ui::section(&format!("ASN search — \"{query}\""));
+    ui::kv("source", result.source);
+    ui::kv("matches", &result.asns.len().to_string());
+    if result.asns.is_empty() {
+        ui::info("no ASNs matched. Try a shorter/different name (e.g. 'nvidia' not 'nvidia.com'). PeeringDB only indexes networks that peer; obscure orgs may not appear.");
+        return Ok(());
     }
-    if !v4.is_empty() {
-        ui::section("Sample IPv4 prefixes");
-        for p in v4.iter().take(15) {
-            let pfx = p.get("prefix").and_then(|x| x.as_str()).unwrap_or("");
-            let name = p.get("name").and_then(|x| x.as_str()).unwrap_or("");
-            let asn = p.get("parent_asn").and_then(|x| x.as_u64());
-            let asn_s = asn.map(|n| format!("AS{n}")).unwrap_or_default();
-            ui::list_item(&format!("{:<22} {:<10} {}", pfx, asn_s, name));
-        }
+    ui::section("ASNs");
+    for a in result.asns.iter().take(50) {
+        let cc = if a.country.is_empty() { "??".into() } else { a.country.clone() };
+        let desc = if a.description.is_empty() { String::new() } else { format!("  ({})", a.description) };
+        ui::list_item(&format!("AS{:<8} [{:<2}] {}{}", a.asn, cc, a.name, desc));
+    }
+    if result.asns.len() > 50 {
+        ui::info(&format!("(+{} more ASNs in --json)", result.asns.len() - 50));
     }
     Ok(())
 }
