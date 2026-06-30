@@ -251,6 +251,40 @@ EXAMPLES
         max_hosts: usize,
     },
 
+    /// Live-host discovery across a CIDR (fast TCP probe to common ports)
+    #[command(long_about = "\
+Feed a CIDR (or single IP) and get back only the hosts that respond on at
+least one of the probe ports. Much faster than a full port scan because
+each IP gets only a few quick TCP attempts.
+
+DEFAULTS
+  --probe-ports 80,443,22,8080,3389   widely-listening ports
+  --connect-timeout 500ms             aggressive — bump for slow networks
+  --concurrency 1000                  raise on fast links + small CIDRs
+  --max-hosts 65536                   cap CIDR expansion (= /16)
+
+EXAMPLES
+  webrecon alive 10.0.0.0/24
+  webrecon alive 198.51.100.0/22 --probe-ports 22,80,443,8443
+  webrecon alive 1.2.3.0/29 --connect-timeout 1500
+  webrecon alive 192.168.1.0/24 --json | jq '.alive[].ip'
+
+Pipe the output into `webrecon scan` for full enumeration of the alive ones:
+  webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs -I{} webrecon scan {} --top 1000
+")]
+    Alive {
+        /// CIDR (e.g. 10.0.0.0/24) or single IP
+        target: String,
+        #[arg(long, default_value = "80,443,22,8080,3389", long_help = "Comma-separated probe ports.")]
+        probe_ports: String,
+        #[arg(long, default_value_t = 500, long_help = "Per-port TCP connect timeout (milliseconds).")]
+        connect_timeout: u64,
+        #[arg(long, default_value_t = 1000, long_help = "Concurrent IP probes.")]
+        concurrency: usize,
+        #[arg(long, default_value_t = 65536, long_help = "Reject a CIDR that expands beyond this many hosts.")]
+        max_hosts: usize,
+    },
+
     /// Full IP intel: IPinfo + GreyNoise + AbuseIPDB in parallel
     #[command(long_about = "\
 Concurrent triple-lookup for a single IP:
@@ -427,6 +461,9 @@ async fn main() {
             commands::scan::run(target, ports.as_deref(), *top, *concurrency, *connect_timeout, *no_banner, *max_hosts, cli.json).await
         }
         Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
+        Cmd::Alive { target, probe_ports, connect_timeout, concurrency, max_hosts } => {
+            commands::alive::run(target, probe_ports, *connect_timeout, *concurrency, *max_hosts, cli.json).await
+        }
         Cmd::Ipinfo { ip, max_age } => commands::ipintel::run(ip, *max_age, cli.timeout, cli.json).await,
         Cmd::Shodan { ip } => commands::intel::shodan(ip, cli.timeout, cli.json).await,
         Cmd::Censys { ip } => commands::intel::censys(ip, cli.timeout, cli.json).await,

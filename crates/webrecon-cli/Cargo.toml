@@ -25,3 +25,4 @@ owo-colors = { workspace = true }
 indicatif = { workspace = true }
 anyhow = { workspace = true }
 trust-dns-resolver = { workspace = true }
+ipnet = { workspace = true }

@@ -75,6 +75,16 @@ pub async fn run(
             ui::section(&format!("CIDR — AS{n}"));
             if let Some(c) = cidr.get("ipv4_count") { ui::kv("ipv4_count", &ui::json_str(c)); }
             if let Some(c) = cidr.get("ipv6_count") { ui::kv("ipv6_count", &ui::json_str(c)); }
+            if let Some(arr) = cidr.get("prefixes").and_then(|v| v.as_array()) {
+                let preview: Vec<&str> = arr.iter().take(10).filter_map(|p| p.as_str()).collect();
+                if !preview.is_empty() {
+                    ui::section(&format!("Prefixes (first {} of {})", preview.len(), arr.len()));
+                    for p in preview { ui::list_item(p); }
+                    if arr.len() > 10 {
+                        ui::info(&format!("(+{} more, use `webrecon cidr AS{}` for full list)", arr.len() - 10, n));
+                    }
+                }
+            }
         }
         report.insert("cidr".into(), cidr);
     }
@@ -82,7 +92,7 @@ pub async fn run(
     // ── Subdomains (passive only — fast) ───────────────────────────
     if !no_subs {
         if let Some(d) = &apex {
-            let subs_http = subs_client(timeout);
+            let subs_http = subs_client(timeout.max(60));
             let pb = if !as_json { Some(ui::spinner(&format!("subdomains {d}"))) } else { None };
             let results = sub_passive::run_all(&subs_http, d, &cfg.keys).await;
             if let Some(pb) = pb { pb.finish_and_clear(); }

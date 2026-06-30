@@ -146,16 +146,19 @@ pub async fn virustotal(client: &Client, key: &str, domain: &str) -> Result<Vec<
     Ok(out)
 }
 
-pub async fn censys_certs(client: &Client, token: &str, domain: &str) -> Result<Vec<String>> {
+pub async fn censys_certs(client: &Client, key: &str, domain: &str) -> Result<Vec<String>> {
     let body = serde_json::json!({
         "q": format!("names: {}", domain),
         "per_page": 100,
     });
-    let resp = client.post("https://search.censys.io/api/v2/certificates/search")
-        .bearer_auth(token)
+    let req = client.post("https://search.censys.io/api/v2/certificates/search")
         .header("Content-Type", "application/json")
-        .json(&body)
-        .send().await
+        .json(&body);
+    let req = match key.split_once(':') {
+        Some((id, secret)) if !id.is_empty() && !secret.is_empty() => req.basic_auth(id, Some(secret)),
+        _ => req.bearer_auth(key),
+    };
+    let resp = req.send().await
         .map_err(|e| WebreconError::Network(e.to_string()))?;
     if !resp.status().is_success() {
         return Err(WebreconError::Network(format!("censys -> {}", resp.status())));

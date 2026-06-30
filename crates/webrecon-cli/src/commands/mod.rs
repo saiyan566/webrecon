@@ -8,3 +8,4 @@ pub mod ipintel;
 pub mod config_show;
 pub mod intel;
 pub mod recon;
+pub mod alive;
