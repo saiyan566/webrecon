@@ -24,7 +24,7 @@ pub fn run(as_json: bool) -> Result<()> {
     if as_json {
         let json = serde_json::json!({
             "config_path": path,
-            "keys": entries.iter().map(|(k,v)| (*k, v.map(mask).unwrap_or_else(|| "<unset>".into()))).collect::<std::collections::BTreeMap<_,_>>(),
+            "keys": entries.iter().map(|(k,v)| (*k, v.map(|s| mask(s)).unwrap_or_else(|| "<unset>".into()))).collect::<std::collections::BTreeMap<_,_>>(),
         });
         ui::print_json(&json);
         return Ok(());

@@ -17,7 +17,7 @@ Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanni
 | 3.5   | SYN scan (raw sockets, root)                | ⏳ planned |
 | 4     | `cve` — NVD lookup by ID, keyword search, or scan→fingerprint→CVE chain | ✅ done |
 | 5a    | Config + keys (`~/.config/webrecon/config.toml` + `WEBRECON_*` env) | ✅ done |
-| 5b    | `ipinfo` / `greynoise` / `abuseipdb` — IP enrichment | ✅ done |
+| 5b    | `ipinfo` — unified IP intel (IPinfo + GreyNoise + AbuseIPDB in parallel) | ✅ done |
 | 5c    | `subs` boost: VirusTotal + Censys cert sources | ✅ done |
 | 5d    | `cve` upgrade: Vulners preferred, NVD with API key | ✅ done |
 | 5e+   | Shodan / VT / Pulsedive / IntelX / Censys host + unified `recon` | ⏳ planned |
@@ -96,10 +96,16 @@ WEBRECON_NVD, WEBRECON_ABUSEIPDB, WEBRECON_CENSYS_ID, WEBRECON_CENSYS_SECRET
 
 ### IP enrichment
 
+`webrecon ipinfo <ip>` runs **IPinfo + GreyNoise + AbuseIPDB** in parallel and shows a single report. Any source whose key is missing is skipped (not an error).
+
+- **IPinfo** — *who/where:* geo, ASN, ISP, org, hosting/VPN/Tor flags
+- **GreyNoise** — *intent:* mass-scanning noise vs targeted; benign infra (RIOT)
+- **AbuseIPDB** — *history:* crowdsourced abuse score + recent reports
+
 ```bash
-webrecon ipinfo 8.8.8.8                # geo + ASN + org (needs ipinfo key)
-webrecon greynoise 45.83.66.21         # noise/riot classification (needs greynoise key)
-webrecon abuseipdb 185.220.100.255     # abuse score + recent reports (needs abuseipdb key)
+webrecon ipinfo 8.8.8.8
+webrecon ipinfo 185.220.100.255 --max-age 30   # narrow abuse report window
+webrecon ipinfo 1.1.1.1 --json
 ```
 
 ### Global flags

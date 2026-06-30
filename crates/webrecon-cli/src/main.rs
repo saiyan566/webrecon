@@ -65,13 +65,10 @@ enum Cmd {
         #[command(subcommand)]
         action: CveAction,
     },
-    /// IPinfo geo/ASN/org lookup (requires WEBRECON_IPINFO)
-    Ipinfo { ip: String },
-    /// GreyNoise community noise/riot classification (requires WEBRECON_GREYNOISE)
-    Greynoise { ip: String },
-    /// AbuseIPDB abuse score + reports (requires WEBRECON_ABUSEIPDB)
-    Abuseipdb {
+    /// Full IP intel: IPinfo (geo/ASN) + GreyNoise (noise) + AbuseIPDB (reputation) in parallel
+    Ipinfo {
         ip: String,
+        /// AbuseIPDB report window in days
         #[arg(long, default_value_t = 90)]
         max_age: u32,
     },
@@ -139,9 +136,7 @@ async fn main() {
             commands::scan::run(target, ports.as_deref(), *top, *concurrency, *connect_timeout, *no_banner, *max_hosts, cli.json).await
         }
         Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
-        Cmd::Ipinfo { ip } => commands::ipintel::ipinfo(ip, cli.timeout, cli.json).await,
-        Cmd::Greynoise { ip } => commands::ipintel::greynoise(ip, cli.timeout, cli.json).await,
-        Cmd::Abuseipdb { ip, max_age } => commands::ipintel::abuseipdb(ip, *max_age, cli.timeout, cli.json).await,
+        Cmd::Ipinfo { ip, max_age } => commands::ipintel::run(ip, *max_age, cli.timeout, cli.json).await,
         Cmd::Config => commands::config_show::run(cli.json),
     };
 
