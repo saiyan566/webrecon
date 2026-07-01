@@ -188,15 +188,28 @@ pub async fn run(
         } else if !as_json { ui::info("shodan skipped: no key"); }
     }
 
-    // ── VirusTotal (target itself) ─────────────────────────────────
+    // ── VirusTotal (target itself + relationships) ─────────────────
     if !no_vt {
         if let Some(k) = cfg.keys.virustotal.as_deref() {
             let intel_http = intel_client(timeout);
             let indicator = apex.clone().unwrap_or_else(|| primary_ip.to_string());
-            let pb = if !as_json { Some(ui::spinner(&format!("virustotal {indicator}"))) } else { None };
-            let v = vt_mod::lookup(&intel_http, k, &indicator).await.ok();
+            let is_domain = apex.is_some();
+
+            // Base object + three relationships in parallel.
+            let pb = if !as_json { Some(ui::spinner(&format!("virustotal {indicator} (+relationships)"))) } else { None };
+            let base = vt_mod::lookup(&intel_http, k, &indicator);
+            let (rel_a, rel_b) = if is_domain {
+                ("subdomains", "resolutions")
+            } else {
+                ("resolutions", "communicating_files")
+            };
+            let a = vt_mod::relationship(&intel_http, k, &indicator, rel_a, 40);
+            let b = vt_mod::relationship(&intel_http, k, &indicator, rel_b, 40);
+            let comm = vt_mod::relationship(&intel_http, k, &indicator, "communicating_files", 20);
+            let (base_r, a_r, b_r, comm_r) = tokio::join!(base, a, b, comm);
             if let Some(pb) = pb { pb.finish_and_clear(); }
-            if let Some(v) = &v {
+
+            if let Ok(v) = &base_r {
                 if !as_json {
                     ui::section("VirusTotal");
                     let attrs = v.get("attributes").unwrap_or(v);
@@ -212,6 +225,68 @@ pub async fn run(
                     }
                 }
                 report.insert("virustotal".into(), v.clone());
+            }
+
+            // Relationship A — subdomains (domain) OR resolutions (ip)
+            if let Ok(v) = &a_r {
+                let arr = v.as_array().cloned().unwrap_or_default();
+                if !as_json && !arr.is_empty() {
+                    ui::section(&format!("VT — {rel_a} ({})", arr.len()));
+                    for item in arr.iter().take(15) {
+                        let id = item.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                        let host = item.pointer("/attributes/host_name").and_then(|x| x.as_str()).unwrap_or("");
+                        let date = item.pointer("/attributes/date").and_then(|x| x.as_i64())
+                            .map(|d| chrono_like(d)).unwrap_or_default();
+                        if !host.is_empty() {
+                            ui::list_item(&format!("{} → {}   {}", host, id, date));
+                        } else {
+                            ui::list_item(id);
+                        }
+                    }
+                    if arr.len() > 15 { ui::info(&format!("(+{} more in --json)", arr.len() - 15)); }
+                }
+                report.insert(format!("vt_{rel_a}"), Value::Array(arr));
+            }
+
+            // Relationship B — resolutions (domain) OR communicating_files (ip)
+            if let Ok(v) = &b_r {
+                let arr = v.as_array().cloned().unwrap_or_default();
+                if !as_json && !arr.is_empty() {
+                    ui::section(&format!("VT — {rel_b} ({})", arr.len()));
+                    for item in arr.iter().take(15) {
+                        let id = item.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                        let ip = item.pointer("/attributes/ip_address").and_then(|x| x.as_str()).unwrap_or("");
+                        let date = item.pointer("/attributes/date").and_then(|x| x.as_i64())
+                            .map(|d| chrono_like(d)).unwrap_or_default();
+                        if !ip.is_empty() {
+                            ui::list_item(&format!("{} ← {}   {}", ip, id, date));
+                        } else {
+                            ui::list_item(id);
+                        }
+                    }
+                    if arr.len() > 15 { ui::info(&format!("(+{} more in --json)", arr.len() - 15)); }
+                }
+                report.insert(format!("vt_{rel_b}"), Value::Array(arr));
+            }
+
+            // Communicating files (malware ↔ target) — most actionable signal.
+            if let Ok(v) = &comm_r {
+                let arr = v.as_array().cloned().unwrap_or_default();
+                let malicious: Vec<&Value> = arr.iter().filter(|f| {
+                    f.pointer("/attributes/last_analysis_stats/malicious")
+                        .and_then(|x| x.as_u64()).unwrap_or(0) > 0
+                }).collect();
+                if !as_json && !arr.is_empty() {
+                    ui::section(&format!("VT — communicating files ({} total, {} flagged malicious)", arr.len(), malicious.len()));
+                    for f in malicious.iter().take(10) {
+                        let sha256 = f.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                        let mal = f.pointer("/attributes/last_analysis_stats/malicious").and_then(|x| x.as_u64()).unwrap_or(0);
+                        let name = f.pointer("/attributes/meaningful_name").and_then(|x| x.as_str()).unwrap_or("");
+                        ui::list_item(&format!("{}  {} engines  {}", sha256, mal, name));
+                    }
+                    if malicious.len() > 10 { ui::info(&format!("(+{} more malicious in --json)", malicious.len() - 10)); }
+                }
+                report.insert("vt_communicating_files".into(), Value::Array(arr));
             }
         } else if !as_json { ui::info("virustotal skipped: no key"); }
     }
@@ -364,4 +439,31 @@ fn render_section_kv(as_json: bool, title: &str, v: &Value, keys: &[&str]) {
 
 fn banner_header(target: &str) {
     ui::section(&format!("Recon — {target}"));
+}
+
+/// Render a unix-epoch seconds value as `YYYY-MM-DDThh:mm:ssZ` without a chrono dep.
+fn chrono_like(unix: i64) -> String {
+    if unix <= 0 { return String::new(); }
+    let days = unix / 86400;
+    let secs_of_day = unix % 86400;
+    let (y, m, d) = civil_from_days(days);
+    let h = secs_of_day / 3600;
+    let mi = (secs_of_day / 60) % 60;
+    let s = secs_of_day % 60;
+    format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}Z")
+}
+
+/// Howard Hinnant's civil-from-days: days-since-1970-01-01 → (y, m, d).
+fn civil_from_days(z: i64) -> (i32, u32, u32) {
+    let z = z + 719468;
+    let era = if z >= 0 { z } else { z - 146096 } / 146097;
+    let doe = (z - era * 146097) as u64;
+    let yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365*yoe + yoe/4 - yoe/100);
+    let mp = (5*doy + 2)/153;
+    let d = doy - (153*mp + 2)/5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y as i32, m as u32, d as u32)
 }
