@@ -147,7 +147,14 @@ pub async fn run(
                         let t: String = title.chars().take(70).collect();
                         format!(" — {t}")
                     };
-                    ui::list_item(&format!("{:<3} {}{}{}{}{}", r.status, r.url, server, cdn, tech, title_s));
+                    let status_s = if r.status == 0 { "TLS".to_string() } else { r.status.to_string() };
+                    ui::list_item(&format!("{:<3} {}{}{}{}{}", status_s, r.url, server, cdn, tech, title_s));
+                    if let Some(t) = &r.tls {
+                        if !t.sans.is_empty() {
+                            let sans_line = if t.sans.len() <= 6 { t.sans.join(", ") } else { format!("{}, … (+{} more)", t.sans[..6].join(", "), t.sans.len() - 6) };
+                            ui::list_item(&format!("     sans: {}", sans_line));
+                        }
+                    }
                 }
             }
         }

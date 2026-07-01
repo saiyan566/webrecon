@@ -69,10 +69,20 @@ pub async fn run(
         let server = r.server.clone().map(|s| format!(" server={s}")).unwrap_or_default();
         let tech = if r.tech.is_empty() { String::new() } else { format!(" tech=[{}]", r.tech.join(",")) };
         let title_s = if title.is_empty() { String::new() } else { format!(" — {}", truncate(&title, 80)) };
+        let status_s = if r.status == 0 { "TLS".to_string() } else { r.status.to_string() };
         ui::list_item(&format!(
             "{:<3} {} ({}ms){}{}{}{}",
-            r.status, r.url, r.elapsed_ms, server, cdn, tech, title_s
+            status_s, r.url, r.elapsed_ms, server, cdn, tech, title_s
         ));
+        if let Some(t) = &r.tls {
+            ui::list_item(&format!("     subject: {}", truncate(&t.subject, 100)));
+            ui::list_item(&format!("     issuer:  {}", truncate(&t.issuer, 100)));
+            if !t.sans.is_empty() {
+                let sans_line = if t.sans.len() <= 6 { t.sans.join(", ") } else { format!("{}, … (+{} more)", t.sans[..6].join(", "), t.sans.len() - 6) };
+                ui::list_item(&format!("     sans:    {}", sans_line));
+            }
+            ui::list_item(&format!("     valid:   {} → {}", t.not_before, t.not_after));
+        }
     }
     Ok(())
 }

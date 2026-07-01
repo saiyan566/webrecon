@@ -11,6 +11,9 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Semaphore;
 
+pub mod tls;
+pub use tls::TlsInfo;
+
 #[derive(Debug, Clone, Serialize)]
 pub struct HttpProbe {
     pub input: String,
@@ -26,6 +29,7 @@ pub struct HttpProbe {
     pub cdn: Option<String>,
     pub redirect_chain: Vec<String>,
     pub elapsed_ms: u128,
+    pub tls: Option<TlsInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -115,6 +119,16 @@ fn expand_schemes(input: &str, prefer_https: bool) -> Vec<String> {
 }
 
 async fn probe_url(input: &str, url: &str, opts: &ProbeOpts) -> Option<HttpProbe> {
+    // Grab TLS info first for https so we still return SAN/subject even if the
+    // HTTP request fails (403 default vhost, TLS-only services, ...).
+    let tls = if url.starts_with("https://") {
+        if let Ok(parsed) = url::Url::parse(url) {
+            let host = parsed.host_str()?.to_string();
+            let port = parsed.port().unwrap_or(443);
+            tls::fetch(&host, &host, port, opts.timeout).await
+        } else { None }
+    } else { None };
+
     let policy = if opts.follow_redirects {
         Policy::limited(opts.max_redirects)
     } else {
@@ -129,7 +143,31 @@ async fn probe_url(input: &str, url: &str, opts: &ProbeOpts) -> Option<HttpProbe
         .ok()?;
 
     let started = std::time::Instant::now();
-    let resp = client.get(url).send().await.ok()?;
+    let resp = match client.get(url).send().await {
+        Ok(r) => r,
+        Err(_) => {
+            // HTTP failed but TLS may have succeeded — SAN list alone is valuable.
+            if let Some(t) = tls {
+                return Some(HttpProbe {
+                    input: input.to_string(),
+                    url: url.to_string(),
+                    scheme: "https".into(),
+                    status: 0,
+                    content_type: None,
+                    content_length: None,
+                    server: None,
+                    powered_by: None,
+                    title: None,
+                    tech: vec![],
+                    cdn: None,
+                    redirect_chain: vec![url.into()],
+                    elapsed_ms: started.elapsed().as_millis(),
+                    tls: Some(t),
+                });
+            }
+            return None;
+        }
+    };
     let final_url = resp.url().to_string();
     let status = resp.status().as_u16();
     let headers = resp.headers().clone();
@@ -163,6 +201,7 @@ async fn probe_url(input: &str, url: &str, opts: &ProbeOpts) -> Option<HttpProbe
         cdn,
         redirect_chain: if final_url != url { vec![url.into(), final_url] } else { vec![url.into()] },
         elapsed_ms: elapsed,
+        tls,
     })
 }
 

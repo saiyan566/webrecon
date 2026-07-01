@@ -211,17 +211,48 @@ EXAMPLES
     Subs {
         /// Apex domain (e.g. example.com)
         target: String,
-        /// Disable passive sources
-        #[arg(long)]
+        #[arg(long, long_help = "\
+Skip all passive sources (crt.sh, AlienVault OTX, HackerTarget, ...) and
+run active-only. Fastest way to test if your active brute-force is doing
+anything on top of what passive already finds.
+
+EXAMPLE
+  webrecon subs example.com --no-passive --active")]
         no_passive: bool,
-        /// Enable active DNS brute force
-        #[arg(long)]
+        #[arg(long, long_help = "\
+Enable DNS brute-force from a wordlist (default: embedded list of ~5000
+common labels). Each entry N is resolved as `N.example.com`; hits are
+kept only when they resolve to at least one A/AAAA.
+
+Passive + active are additive — use both for max coverage:
+  webrecon subs example.com --active
+
+EXAMPLES
+  webrecon subs example.com --active
+  webrecon subs example.com --active --wordlist ~/lists/all.txt --concurrency 200")]
         active: bool,
-        /// Custom wordlist (one entry per line). Defaults to embedded list.
-        #[arg(long)]
+        #[arg(long, long_help = "\
+Path to a custom wordlist for --active. One label per line; blank lines
+and lines starting with `#` are ignored. Typical sources:
+
+  SecLists       Discovery/DNS/subdomains-top1million-5000.txt
+  Assetnote      best-dns-wordlist.txt (~9M entries — huge)
+  n0kovo         dns_wordlist.txt
+
+Bigger list = more coverage AND more traffic to the target's authoritative
+NS. Respect rate limits — many public DNS resolvers throttle above ~200 qps.
+
+EXAMPLE
+  --wordlist /usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt")]
         wordlist: Option<std::path::PathBuf>,
-        /// Concurrent DNS resolutions
-        #[arg(long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50, long_help = "\
+Concurrent DNS resolutions during --active. Bounded by your resolver's
+QPS ceiling more than by your host.
+
+EXAMPLES
+  --concurrency 20     public DNS, be polite
+  --concurrency 100    local unbound / dnsmasq
+  --concurrency 500    dedicated resolver pool")]
         concurrency: usize,
     },
 
@@ -262,17 +293,58 @@ EXAMPLES
     Scan {
         /// host, IP, or CIDR (e.g. example.com / 1.2.3.4 / 10.0.0.0/28)
         target: String,
-        #[arg(long, long_help = "Port spec, e.g. \"22,80,443,8000-8100\". Overrides --top.")]
+        #[arg(long, long_help = "\
+Explicit port spec — takes precedence over --top. Supports mixed lists
+and ranges.
+
+EXAMPLES
+  --ports 22,80,443                          three ports
+  --ports 1-1024                             privileged range
+  --ports 80,443,3000-3010,8000-8100         mixed
+  --ports 1-65535                            everything (slow)")]
         ports: Option<String>,
-        #[arg(long, default_value_t = 100, long_help = "Use nmap top-N list (100 or 1000). Ignored when --ports is given.")]
+        #[arg(long, default_value_t = 100, long_help = "\
+Use nmap's `--top-ports N` list. Only 100 and 1000 supported.
+The top-1000 list covers ~93% of services seen on the internet; top-100
+covers ~78%. Ignored when --ports is given.
+
+EXAMPLES
+  --top 100     fastest, catches web + ssh + rdp + common DBs
+  --top 1000    thorough, still ~10× faster than full 65535")]
         top: u16,
-        #[arg(long, default_value_t = 500, long_help = "Concurrent TCP connect attempts.")]
+        #[arg(long, default_value_t = 500, long_help = "\
+Concurrent connect attempts on this host. Bounded by target's SYN-flood
+protection more than your host.
+
+EXAMPLES
+  --concurrency 100     stealthier, WAF-friendly
+  --concurrency 500     default, balanced
+  --concurrency 5000    aggressive, needs `ulimit -n 8192`")]
         concurrency: usize,
-        #[arg(long, default_value_t = 1500, long_help = "Per-port connect timeout in milliseconds.")]
+        #[arg(long, default_value_t = 1500, long_help = "\
+Per-port TCP connect timeout (ms). Since you already know this host is
+reachable, closed/filtered ports normally return quickly — this just
+caps how long silent-drop ports burn.
+
+EXAMPLES
+  --connect-timeout 800     nearby, low-latency
+  --connect-timeout 3000    cross-continent or CDN edge")]
         connect_timeout: u64,
-        #[arg(long, long_help = "Skip banner grab on open ports (faster, less info).")]
+        #[arg(long, long_help = "\
+Skip service banner grab on open ports. ~2× faster on hosts with many
+open ports, but you lose version strings — meaning `webrecon cve` after
+this will have nothing to fingerprint from.
+
+EXAMPLE
+  webrecon scan 1.2.3.4 --top 1000 --no-banner")]
         no_banner: bool,
-        #[arg(long, default_value_t = 256, long_help = "Reject a CIDR that expands to more than this many hosts.")]
+        #[arg(long, default_value_t = 256, long_help = "\
+Refuses to scan a CIDR bigger than this. Different from the sweep's cap
+because a scan multiplies by port count — 256 hosts × 1000 ports is
+already 256k connects.
+
+EXAMPLE
+  webrecon scan 10.0.0.0/22 --top 100 --max-hosts 1500")]
         max_hosts: usize,
     },
 
@@ -300,25 +372,117 @@ Pipe the output into `webrecon scan` for full enumeration of the alive ones:
     Alive {
         /// CIDR (e.g. 10.0.0.0/24) or single IP
         target: String,
-        #[arg(long, default_value = "80,443,22,25,53,445,3389,8080,8443", long_help = "Comma-separated probe ports.")]
+        #[arg(long, default_value = "80,443,22,25,53,445,3389,8080,8443", long_help = "\
+Comma-separated list of TCP ports used for liveness detection. Any single
+successful connect marks the host alive; the sweep does NOT enumerate all
+open ports — that's what --full-scan is for.
+
+Trade-offs:
+  • Fewer ports  → faster, misses hosts that only listen elsewhere
+  • More ports   → slower, catches mail servers / SMB / DB hosts
+
+EXAMPLES
+  --probe-ports 443                              only https
+  --probe-ports 80,443,22                        web + ssh
+  --probe-ports 1-1024                           full privileged range
+  --probe-ports 80,443,22,25,110,143,445,3389   default (broad)")]
         probe_ports: String,
-        #[arg(long, default_value_t = 1200, long_help = "Per-port TCP connect timeout (milliseconds).")]
+        #[arg(long, default_value_t = 1200, long_help = "\
+Per-port TCP connect timeout in milliseconds. Raise on high-latency links
+(satellite, cross-continent) or when residential ISPs silently drop SYN.
+
+Trade-offs:
+  • 300–500ms   LAN / same-region cloud, fast but drops slow hosts
+  • 1200ms      default — safe for most public internet
+  • 2500–4000ms residential / behind-NAT / far-away targets
+
+EXAMPLE
+  --connect-timeout 2500       when a /24 returns 0 alive on default")]
         connect_timeout: u64,
-        #[arg(long, default_value_t = 1000, long_help = "Concurrent IP probes.")]
+        #[arg(long, default_value_t = 1000, long_help = "\
+Max concurrent TCP connects across the whole sweep. Higher = faster on a
+big CIDR but you'll hit kernel fd limits (`ulimit -n`) and NAT conntrack
+saturation past ~5000 on a laptop.
+
+RULE OF THUMB
+  254 hosts × 9 ports = 2286 connects.
+  At concurrency 1000 the sweep drains in ~3 waves (≈ 3 × timeout).
+
+EXAMPLES
+  --concurrency 500     safer on flaky links / oversubscribed VPN
+  --concurrency 3000    aggressive; needs `ulimit -n 8192`")]
         concurrency: usize,
-        #[arg(long, default_value_t = 65536, long_help = "Reject a CIDR that expands beyond this many hosts.")]
+        #[arg(long, default_value_t = 65536, long_help = "\
+Refuses to expand a CIDR beyond this many hosts. Safety valve so a typo'd
+/8 doesn't produce 16M targets.
+
+Common sizes:
+  /24 =    254   /22 = 1022   /20 =  4094
+  /16 = 65534    /14 = 262142
+
+EXAMPLE
+  webrecon alive 10.0.0.0/14 --max-hosts 300000")]
         max_hosts: usize,
-        #[arg(long, long_help = "After discovery, run a full 1-65535 TCP scan on every alive host. Warning: expensive — cost scales with the alive count, not the CIDR size.")]
+        #[arg(long, long_help = "\
+After discovery, run a full TCP port scan on every alive host. Cost scales
+with the ALIVE count × --scan-ports width, not the CIDR size — so a /16
+with 20 live hosts is very cheap; a /16 with 5000 live hosts is not.
+
+Prints a worst-case ETA before starting; real elapsed is usually 20–40%
+of that because closed ports return RST instantly.
+
+EXAMPLE
+  webrecon alive 185.136.69.0/24 --full-scan
+  webrecon alive 10.0.0.0/16 --full-scan --scan-ports 80,443,22")]
         full_scan: bool,
-        #[arg(long, default_value = "1-65535", long_help = "Port range used when --full-scan is on (ignored otherwise).")]
+        #[arg(long, default_value = "1-65535", long_help = "\
+Port spec for the --full-scan phase (ignored otherwise). Supports lists
+and ranges, mixed freely.
+
+EXAMPLES
+  --scan-ports 1-65535             every port (slowest, most complete)
+  --scan-ports 1-1024              privileged range only
+  --scan-ports 80,443,8080,8443    web-only, fastest
+  --scan-ports 1-1024,3306,5432,6379,9200,27017  common + DBs")]
         scan_ports: String,
-        #[arg(long, default_value_t = 2000, long_help = "Concurrent TCP connects per full-scan host.")]
+        #[arg(long, default_value_t = 2000, long_help = "\
+Concurrent TCP connects PER HOST during the --full-scan phase. Applied
+per host because a full scan on one host is already 65k connects; batching
+across hosts would starve any single host.
+
+EXAMPLES
+  --scan-concurrency 500    slow/careful (WAF-friendly)
+  --scan-concurrency 5000   fast, needs high fd limit")]
         scan_concurrency: usize,
-        #[arg(long, default_value_t = 800, long_help = "Per-port TCP connect timeout for the full-scan phase (ms).")]
+        #[arg(long, default_value_t = 800, long_help = "\
+Per-port TCP connect timeout during --full-scan (ms). Lower than the
+discovery timeout because at this stage you already KNOW the host is up,
+so closed/filtered ports should reject quickly.
+
+EXAMPLE
+  --scan-timeout 500       when scanning a fast, nearby target")]
         scan_timeout: u64,
-        #[arg(long, long_help = "Skip banner grab in the full-scan phase (faster).")]
+        #[arg(long, long_help = "\
+Skip service banner grab in the --full-scan phase. Speeds the scan up by
+~2× on hosts with many open ports; you lose the version strings that
+would feed `webrecon cve`.
+
+EXAMPLE
+  webrecon alive 1.2.3.0/24 --full-scan --no-banner   # fastest possible")]
         no_banner: bool,
-        #[arg(long, long_help = "After --full-scan, run HTTP fingerprint on every open port that looks web (any port; the HTTP prober will filter by response).")]
+        #[arg(long, long_help = "\
+After --full-scan, run HTTP fingerprint on every open port on every alive
+host. The prober auto-detects HTTP vs HTTPS by port; non-web ports simply
+time out and are silently dropped.
+
+For each responding endpoint you get status, redirect chain, server,
+X-Powered-By, CDN, ~30 tech fingerprints, page title, and (for HTTPS)
+the TLS cert subject / issuer / SAN list — even when the HTTP request
+itself 403s (the SAN list is often your route to real hostnames behind
+a shared IP).
+
+EXAMPLE
+  webrecon alive 185.136.69.0/24 --full-scan --probe --scan-ports 80,443,8080,8443")]
         probe: bool,
     },
 
@@ -487,15 +651,59 @@ EXAMPLES
     Http {
         /// Hosts, host:port, or URLs. Multiple allowed.
         targets: Vec<String>,
-        #[arg(long, long_help = "Read targets from file (one per line, # for comments).")]
+        #[arg(long, long_help = "\
+Read targets from a file, one per line. Blank lines and lines starting
+with `#` are ignored. Combines with any targets given on the CLI.
+
+Accepted forms per line:
+  example.com
+  1.2.3.4
+  1.2.3.4:8443
+  https://internal.corp:9000/health
+
+EXAMPLES
+  webrecon http --list subs.txt
+  webrecon subs example.com --json | jq -r '.subdomains[]' > subs.txt \\
+    && webrecon http --list subs.txt --concurrency 200")]
         list: Option<std::path::PathBuf>,
-        #[arg(long, default_value_t = 50, long_help = "Concurrent probes.")]
+        #[arg(long, default_value_t = 50, long_help = "\
+Number of endpoints probed in parallel. Each probe does at most 2 TCP
+connects (HTTPS then HTTP fallback) plus a TLS handshake, so 50 = ~150
+sockets briefly open.
+
+EXAMPLES
+  --concurrency 20    friendly to WAFs / rate-limited targets
+  --concurrency 200   bulk enum after `webrecon subs`
+  --concurrency 500   throwaway VPS; needs `ulimit -n 4096`")]
         concurrency: usize,
-        #[arg(long, default_value_t = 10000, long_help = "Per-target timeout (ms).")]
+        #[arg(long, default_value_t = 10000, long_help = "\
+Per-target timeout in milliseconds. Covers TCP connect + TLS handshake
++ HTTP round-trip. Raise for CDN-fronted or overseas hosts.
+
+EXAMPLES
+  --timeout-ms 3000    fast fail (only strong signals)
+  --timeout-ms 10000   default — safe for CDN edges
+  --timeout-ms 30000   internal networks over VPN with high jitter")]
         timeout_ms: u64,
-        #[arg(long, long_help = "Do not follow redirects.")]
+        #[arg(long, long_help = "\
+Disable redirect following. By default up to 5 redirects are followed
+and the `redirect_chain` field lists each hop.
+
+Use this when you want to see the raw 3xx response (Location header,
+status code) instead of the final destination — e.g. to catch open
+redirects or SSO handoff URLs.
+
+EXAMPLE
+  webrecon http login.corp.com --no-follow")]
         no_follow: bool,
-        #[arg(long, long_help = "Try HTTP before HTTPS (default is HTTPS first).")]
+        #[arg(long, long_help = "\
+Try plain HTTP first, then HTTPS. Default order is HTTPS-first because
+it yields more info (cert SAN, TLS version) and modern hosts default to
+TLS. Flip this only when scanning a range known to be HTTP-only (legacy
+appliances, embedded devices, IoT).
+
+EXAMPLE
+  webrecon http --prefer-http 192.168.1.0/24    # LAN of printers/cams")]
         prefer_http: bool,
     },
 
