@@ -3,7 +3,7 @@ use anyhow::Result;
 use std::net::IpAddr;
 use std::str::FromStr;
 use std::time::Duration;
-use webrecon_portscan::scan::discover_alive;
+use webrecon_portscan::scan::{discover_alive, scan_host, ScanOpts};
 use webrecon_portscan::ports::parse_spec;
 
 pub async fn run(
@@ -12,6 +12,11 @@ pub async fn run(
     connect_timeout_ms: u64,
     concurrency: usize,
     max_hosts: usize,
+    full_scan: bool,
+    scan_ports_spec: &str,
+    scan_concurrency: usize,
+    scan_timeout_ms: u64,
+    no_banner: bool,
     as_json: bool,
 ) -> Result<()> {
     let probe_ports = parse_spec(probe_ports_spec)?;
@@ -39,6 +44,33 @@ pub async fn run(
 
     if let Some(pb) = pb { pb.finish_and_clear(); }
 
+    // Optional phase 2: full port scan against every alive host.
+    let full_results = if full_scan && !alive.is_empty() {
+        let scan_ports = parse_spec(scan_ports_spec)?;
+        if !as_json {
+            ui::info(&format!(
+                "full scan — {} host(s) × {} port(s), concurrency {}, timeout {}ms  (~{})",
+                alive.len(), scan_ports.len(), scan_concurrency, scan_timeout_ms,
+                eta_hint(alive.len(), scan_ports.len(), scan_concurrency, scan_timeout_ms)
+            ));
+        }
+        let opts = ScanOpts {
+            concurrency: scan_concurrency,
+            connect_timeout: Duration::from_millis(scan_timeout_ms),
+            do_banner: !no_banner,
+        };
+        let mut out = Vec::new();
+        for (ip, _) in &alive {
+            let pb = if !as_json {
+                Some(ui::spinner(&format!("scanning {} ({} ports)", ip, scan_ports.len())))
+            } else { None };
+            let open = scan_host(&ip.to_string(), *ip, &scan_ports, &opts).await;
+            if let Some(pb) = pb { pb.finish_and_clear(); }
+            out.push((*ip, open));
+        }
+        Some(out)
+    } else { None };
+
     if as_json {
         ui::print_json(&serde_json::json!({
             "target": target,
@@ -49,6 +81,10 @@ pub async fn run(
                 "ip": ip.to_string(),
                 "ports": ports,
             })).collect::<Vec<_>>(),
+            "full_scan": full_results.as_ref().map(|rs| rs.iter().map(|(ip, open)| serde_json::json!({
+                "ip": ip.to_string(),
+                "open": open,
+            })).collect::<Vec<_>>()),
         }));
         return Ok(());
     }
@@ -70,7 +106,28 @@ pub async fn run(
         ui::list_item("services on non-default ports — retry with --probe-ports 80,443,22,25,53,110,143,445,993,995,1723,3306,3389,5432,5900,8080,8443");
         ui::list_item("egress from your host is blocked (corporate/VPN filter) — test connectivity: `curl -v https://1.1.1.1`");
     }
+
+    if let Some(rs) = &full_results {
+        ui::section("Full scan — alive hosts");
+        for (ip, open) in rs {
+            ui::kv(&ip.to_string(), &format!("{} open", open.len()));
+            for p in open {
+                let svc = p.service.as_deref().unwrap_or("?");
+                let mut line = format!("  {:>5}/tcp  {}", p.port, svc);
+                if let Some(b) = &p.banner { line.push_str(&format!("  {}", b)); }
+                ui::list_item(&line);
+            }
+        }
+    }
     Ok(())
+}
+
+fn eta_hint(hosts: usize, ports: usize, concurrency: usize, timeout_ms: u64) -> String {
+    let per_host_ms = (ports.max(1) as u64 * timeout_ms) / concurrency.max(1) as u64;
+    let total_s = (hosts as u64 * per_host_ms) / 1000;
+    if total_s < 60 { format!("~{}s worst-case", total_s) }
+    else if total_s < 3600 { format!("~{}m worst-case", total_s / 60) }
+    else { format!("~{:.1}h worst-case", total_s as f64 / 3600.0) }
 }
 
 fn expand(target: &str, max_hosts: usize) -> Result<Vec<IpAddr>> {

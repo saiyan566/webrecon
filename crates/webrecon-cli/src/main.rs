@@ -308,6 +308,16 @@ Pipe the output into `webrecon scan` for full enumeration of the alive ones:
         concurrency: usize,
         #[arg(long, default_value_t = 65536, long_help = "Reject a CIDR that expands beyond this many hosts.")]
         max_hosts: usize,
+        #[arg(long, long_help = "After discovery, run a full 1-65535 TCP scan on every alive host. Warning: expensive — cost scales with the alive count, not the CIDR size.")]
+        full_scan: bool,
+        #[arg(long, default_value = "1-65535", long_help = "Port range used when --full-scan is on (ignored otherwise).")]
+        scan_ports: String,
+        #[arg(long, default_value_t = 2000, long_help = "Concurrent TCP connects per full-scan host.")]
+        scan_concurrency: usize,
+        #[arg(long, default_value_t = 800, long_help = "Per-port TCP connect timeout for the full-scan phase (ms).")]
+        scan_timeout: u64,
+        #[arg(long, long_help = "Skip banner grab in the full-scan phase (faster).")]
+        no_banner: bool,
     },
 
     /// Full IP intel: IPinfo + GreyNoise + AbuseIPDB in parallel
@@ -488,8 +498,12 @@ async fn main() {
             commands::scan::run(target, ports.as_deref(), *top, *concurrency, *connect_timeout, *no_banner, *max_hosts, cli.json).await
         }
         Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
-        Cmd::Alive { target, probe_ports, connect_timeout, concurrency, max_hosts } => {
-            commands::alive::run(target, probe_ports, *connect_timeout, *concurrency, *max_hosts, cli.json).await
+        Cmd::Alive { target, probe_ports, connect_timeout, concurrency, max_hosts, full_scan, scan_ports, scan_concurrency, scan_timeout, no_banner } => {
+            commands::alive::run(
+                target, probe_ports, *connect_timeout, *concurrency, *max_hosts,
+                *full_scan, scan_ports, *scan_concurrency, *scan_timeout, *no_banner,
+                cli.json,
+            ).await
         }
         Cmd::Ipinfo { ip, max_age } => commands::ipintel::run(ip, *max_age, cli.timeout, cli.json).await,
         Cmd::Shodan { ip } => commands::intel::shodan(ip, cli.timeout, cli.json).await,
