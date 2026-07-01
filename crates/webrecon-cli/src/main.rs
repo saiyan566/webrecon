@@ -189,7 +189,7 @@ EXAMPLES
   webrecon whois example.com
   webrecon whois 1.1.1.1 --json
 ")]
-    #[command(help_heading = "Discovery")]
+    #[command(next_help_heading = "Discovery")]
     Whois { target: String },
 
     /// ASN info — ASN/IP/domain lookup, org search, or deep subdomain sweep
@@ -218,7 +218,7 @@ EXAMPLES
   webrecon asn nvidia --search             # all NVIDIA-owned ASNs
   webrecon asn nvidia.com --deep           # every ASN their subdomains touch
 ")]
-    #[command(help_heading = "Discovery")]
+    #[command(next_help_heading = "Discovery")]
     Asn {
         target: String,
         /// Org/keyword search via BGPView (treat target as a query term)
@@ -241,7 +241,7 @@ EXAMPLES
   webrecon cidr AS15169       # Google
   webrecon cidr 13335 --json  # Cloudflare
 ")]
-    #[command(help_heading = "Discovery")]
+    #[command(next_help_heading = "Discovery")]
     Cidr { target: String },
 
     /// Enumerate subdomains (passive + optional active brute force)
@@ -266,7 +266,7 @@ EXAMPLES
   webrecon subs target.com --active --wordlist big.txt --concurrency 200
   webrecon subs target.com --no-passive --active     # active only
 ")]
-    #[command(help_heading = "Discovery")]
+    #[command(next_help_heading = "Discovery")]
     Subs {
         /// Apex domain (e.g. example.com)
         target: String,
@@ -325,7 +325,7 @@ CVE intelligence with three modes:
 
 Run `webrecon cve <action> --help` for action-specific flags.
 ")]
-    #[command(help_heading = "Analysis")]
+    #[command(next_help_heading = "Analysis")]
     Cve {
         #[command(subcommand)]
         action: CveAction,
@@ -350,7 +350,7 @@ EXAMPLES
   webrecon scan target.com --ports 22,80,443
   webrecon scan 10.0.0.0/28 --no-banner --concurrency 1000
 ")]
-    #[command(help_heading = "Enumeration")]
+    #[command(next_help_heading = "Enumeration")]
     Scan {
         /// host, IP, or CIDR (e.g. example.com / 1.2.3.4 / 10.0.0.0/28)
         target: String,
@@ -430,7 +430,7 @@ EXAMPLES
 Pipe the output into `webrecon scan` for full enumeration of the alive ones:
   webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs -I{} webrecon scan {} --top 1000
 ")]
-    #[command(help_heading = "Discovery")]
+    #[command(next_help_heading = "Discovery")]
     Alive {
         /// CIDR (e.g. 10.0.0.0/24) or single IP
         target: String,
@@ -563,7 +563,7 @@ EXAMPLES
   webrecon ipinfo 185.220.100.255 --max-age 30
   webrecon ipinfo 1.1.1.1 --json
 ")]
-    #[command(help_heading = "Intel & Reputation")]
+    #[command(next_help_heading = "Intel & Reputation")]
     Ipinfo {
         ip: String,
         #[arg(long, default_value_t = 90, long_help = "AbuseIPDB report-window in days (max 365).")]
@@ -580,7 +580,7 @@ Requires `shodan` key.
 EXAMPLES
   webrecon shodan 1.1.1.1
 ")]
-    #[command(help_heading = "Intel & Reputation")]
+    #[command(next_help_heading = "Intel & Reputation")]
     Shodan { ip: String },
 
     /// Censys host lookup — services + autonomous system + location
@@ -590,7 +590,7 @@ location. Often complements Shodan with different visibility.
 
 Requires `censys` key (Personal Access Token, Bearer auth).
 ")]
-    #[command(help_heading = "Intel & Reputation")]
+    #[command(next_help_heading = "Intel & Reputation")]
     Censys { ip: String },
 
     /// VirusTotal v3 reputation for IP / domain / file hash
@@ -607,7 +607,7 @@ EXAMPLES
   webrecon vt 1.1.1.1
   webrecon vt 44d88612fea8a8f36de82e1278abb02f
 ")]
-    #[command(help_heading = "Intel & Reputation")]
+    #[command(next_help_heading = "Intel & Reputation")]
     Vt { indicator: String },
 
     /// Pulsedive risk score + threat tags for an indicator
@@ -617,7 +617,7 @@ categorization, attribution to feeds.
 
 Requires `pulsedive` key.
 ")]
-    #[command(help_heading = "Intel & Reputation")]
+    #[command(next_help_heading = "Intel & Reputation")]
     Pulsedive { indicator: String },
 
     /// IntelligenceX search by selector (email, domain, btc, hash, URL, …)
@@ -632,7 +632,7 @@ EXAMPLES
   webrecon intelx example.com --limit 50
   webrecon intelx 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa     # btc address
 ")]
-    #[command(help_heading = "Intel & Reputation")]
+    #[command(next_help_heading = "Intel & Reputation")]
     Intelx {
         term: String,
         #[arg(long, default_value_t = 20, long_help = "Max records to fetch (capped at 100).")]
@@ -652,7 +652,7 @@ EXAMPLES
   webrecon github anthropics --repos 50
   webrecon github saiyan566 --json
 ")]
-    #[command(help_heading = "Intel & Reputation")]
+    #[command(next_help_heading = "Intel & Reputation")]
     Github {
         /// GitHub username or org name
         user: String,
@@ -683,7 +683,7 @@ EXAMPLES
   webrecon recon 1.1.1.1 --no-vt --no-shodan
   webrecon recon target.com --json > report.json
 ")]
-    #[command(help_heading = "Analysis")]
+    #[command(next_help_heading = "Analysis")]
     Recon {
         target: String,
         #[arg(long, long_help = "Also TCP-scan the resolved IP using the top-N port list.")]
@@ -718,7 +718,7 @@ EXAMPLES
   webrecon http --list hosts.txt --concurrency 200
   webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs webrecon http
 ")]
-    #[command(help_heading = "Enumeration")]
+    #[command(next_help_heading = "Enumeration")]
     Http {
         /// Hosts, host:port, or URLs. Multiple allowed.
         targets: Vec<String>,
@@ -785,7 +785,7 @@ known key whether it's loaded (with the first/last 3 characters shown) or
 unset. Run after editing ~/.config/webrecon/config.toml to verify the file
 parsed and the right keys were picked up.
 ")]
-    #[command(help_heading = "Meta")]
+    #[command(next_help_heading = "Meta")]
     Config,
 }
 
