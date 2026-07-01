@@ -129,8 +129,12 @@ pub async fn vt(indicator: &str, timeout: u64, as_json: bool) -> Result<()> {
     let kind = indicator_kind(indicator);
     ui::section(&format!("VirusTotal — {indicator} ({kind})"));
     let attrs = v.get("attributes").unwrap_or(&v);
-    if let Some(stats) = attrs.get("last_analysis_stats") {
-        ui::kv("analysis_stats", &ui::json_str(stats));
+    if let Some(stats) = attrs.get("last_analysis_stats").and_then(|s| s.as_object()) {
+        for k in ["harmless", "malicious", "suspicious", "undetected", "timeout"] {
+            if let Some(v) = stats.get(k).and_then(|x| x.as_u64()) {
+                ui::kv(k, &v.to_string());
+            }
+        }
     }
     for key in ["reputation","whois","registrar","country","asn","as_owner","tld","creation_date","last_modification_date","tags","categories","last_dns_records_date","jarm","total_votes"] {
         if let Some(val) = attrs.get(key) {

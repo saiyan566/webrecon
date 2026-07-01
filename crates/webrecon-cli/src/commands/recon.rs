@@ -12,6 +12,7 @@ use webrecon_intel::{http_client as intel_client, shodan as shodan_mod, vt as vt
 use webrecon_ipintel::{http_client as ip_client, ipinfo as ipinfo_mod, greynoise as gn_mod, abuseipdb as abuse_mod};
 use webrecon_portscan::{scan::{scan_host, ScanOpts}, ports::TOP_100, ports::TOP_1000};
 use webrecon_cve::{http_client as cve_client, nvd, vulners, fingerprint};
+use webrecon_http::{probe_many, ProbeOpts};
 
 #[allow(clippy::too_many_arguments)]
 pub async fn run(
@@ -103,6 +104,7 @@ pub async fn run(
                 ui::kv("total_unique", &merged.len().to_string());
                 for r in &results {
                     let line = match &r.error {
+                        Some(e) if r.skipped => format!("skipped ({})", e),
                         Some(e) => format!("{} (err: {})", r.hosts.len(), e),
                         None => r.hosts.len().to_string(),
                     };
@@ -118,7 +120,7 @@ pub async fn run(
             report.insert("subdomains".into(), json!({
                 "total_unique": merged.len(),
                 "hosts": merged,
-                "sources": results.iter().map(|r| json!({"source": r.source, "count": r.hosts.len(), "error": r.error})).collect::<Vec<_>>(),
+                "sources": results.iter().map(|r| json!({"source": r.source, "count": r.hosts.len(), "error": r.error, "skipped": r.skipped})).collect::<Vec<_>>(),
             }));
         } else if !as_json {
             ui::info("subdomains skipped: target is not a domain");
@@ -198,7 +200,13 @@ pub async fn run(
                 if !as_json {
                     ui::section("VirusTotal");
                     let attrs = v.get("attributes").unwrap_or(v);
-                    if let Some(stats) = attrs.get("last_analysis_stats") { ui::kv("analysis_stats", &ui::json_str(stats)); }
+                    if let Some(stats) = attrs.get("last_analysis_stats").and_then(|s| s.as_object()) {
+                        for k in ["harmless", "malicious", "suspicious", "undetected", "timeout"] {
+                            if let Some(v) = stats.get(k).and_then(|x| x.as_u64()) {
+                                ui::kv(k, &v.to_string());
+                            }
+                        }
+                    }
                     for key in ["reputation","registrar","country","asn","as_owner","tags"] {
                         if let Some(val) = attrs.get(key) { ui::kv(key, &ui::json_str(val)); }
                     }
@@ -206,6 +214,48 @@ pub async fn run(
                 report.insert("virustotal".into(), v.clone());
             }
         } else if !as_json { ui::info("virustotal skipped: no key"); }
+    }
+
+    // ── HTTP fingerprint (primary IP + apex + first 5 subs, if any) ───
+    {
+        let mut http_targets: Vec<String> = vec![primary_ip.to_string()];
+        if let Some(d) = &apex { http_targets.push(d.clone()); }
+        if let Some(subs_val) = report.get("subdomains") {
+            if let Some(arr) = subs_val.get("hosts").and_then(|h| h.as_array()) {
+                for h in arr.iter().take(5) {
+                    if let Some(s) = h.as_str() { http_targets.push(s.to_string()); }
+                }
+            }
+        }
+        http_targets.sort();
+        http_targets.dedup();
+        let pb = if !as_json { Some(ui::spinner(&format!("http probe ({} target(s))", http_targets.len()))) } else { None };
+        let http_opts = ProbeOpts { timeout: Duration::from_secs(8), ..Default::default() };
+        let http_results = probe_many(http_targets.clone(), 20, http_opts).await;
+        if let Some(pb) = pb { pb.finish_and_clear(); }
+
+        if !as_json && !http_results.is_empty() {
+            ui::section("HTTP");
+            ui::kv("responded", &format!("{} / {}", http_results.len(), http_targets.len()));
+            for r in &http_results {
+                let status_s = if r.status == 0 { "TLS".to_string() } else { r.status.to_string() };
+                let server = r.server.as_deref().map(|s| format!(" server={s}")).unwrap_or_default();
+                let cdn = r.cdn.as_deref().map(|c| format!(" cdn={c}")).unwrap_or_default();
+                let tech = if r.tech.is_empty() { String::new() } else { format!(" tech=[{}]", r.tech.join(",")) };
+                let title = r.title.as_deref().map(|t| {
+                    let s: String = t.chars().take(60).collect();
+                    format!(" — {s}")
+                }).unwrap_or_default();
+                ui::list_item(&format!("{:<3} {}{}{}{}{}", status_s, r.url, server, cdn, tech, title));
+                if let Some(t) = &r.tls {
+                    if !t.sans.is_empty() {
+                        let sans = if t.sans.len() <= 5 { t.sans.join(", ") } else { format!("{}, … (+{} more)", t.sans[..5].join(", "), t.sans.len() - 5) };
+                        ui::list_item(&format!("     sans: {}", sans));
+                    }
+                }
+            }
+        }
+        report.insert("http".into(), serde_json::to_value(&http_results).unwrap_or(Value::Null));
     }
 
     // ── Scan + CVE (opt-in) ────────────────────────────────────────

@@ -6,16 +6,46 @@ use webrecon_core::{Keys, Result, WebreconError};
 pub struct SourceResult {
     pub source: &'static str,
     pub hosts: Vec<String>,
+    /// Short human-friendly status. None = OK. Some("no key") = clean skip.
+    /// Some("http 503") / Some("timeout") / ... = real failure, kept short.
     pub error: Option<String>,
+    /// True when the source was skipped intentionally (missing key), not a real failure.
+    pub skipped: bool,
 }
 
 impl SourceResult {
     fn ok(source: &'static str, hosts: Vec<String>) -> Self {
-        Self { source, hosts, error: None }
+        Self { source, hosts, error: None, skipped: false }
     }
     fn err(source: &'static str, e: impl ToString) -> Self {
-        Self { source, hosts: Vec::new(), error: Some(e.to_string()) }
+        let raw = e.to_string();
+        let (short, skipped) = classify_error(&raw);
+        Self { source, hosts: Vec::new(), error: Some(short), skipped }
     }
+}
+
+fn classify_error(raw: &str) -> (String, bool) {
+    let low = raw.to_ascii_lowercase();
+    if low.starts_with("no ") && low.ends_with(" key") {
+        return ("no key".into(), true);
+    }
+    // Extract HTTP status if present ("... -> 401 Unauthorized", "... 503 ...").
+    if let Some(pos) = raw.find(" -> ") {
+        let tail: String = raw[pos + 4..].chars().take(30).collect();
+        return (tail.trim().to_string(), false);
+    }
+    if low.contains("timed out") || low.contains("timeout") {
+        return ("timeout".into(), false);
+    }
+    if low.contains("dns error") || low.contains("failed to lookup") {
+        return ("dns error".into(), false);
+    }
+    if low.contains("connection") {
+        return ("connection refused".into(), false);
+    }
+    // Fallback: truncate whatever we got.
+    let s: String = raw.chars().take(60).collect();
+    (s, false)
 }
 
 pub async fn run_all(client: &Client, domain: &str, keys: &Keys) -> Vec<SourceResult> {
@@ -54,11 +84,27 @@ fn unpack(r: Result<Vec<String>>, source: &'static str) -> SourceResult {
 
 pub async fn crtsh(client: &Client, domain: &str) -> Result<Vec<String>> {
     let url = format!("https://crt.sh/?q=%25.{}&output=json", domain);
-    let resp = client.get(&url).send().await
-        .map_err(|e| WebreconError::Network(e.to_string()))?;
-    if !resp.status().is_success() {
-        return Err(WebreconError::Network(format!("crt.sh -> {}", resp.status())));
+    // crt.sh 503s under load; retry with backoff on 5xx / transient network errors.
+    let backoff_ms = [0u64, 800, 2500];
+    let mut last_err: Option<WebreconError> = None;
+    let mut resp_opt: Option<reqwest::Response> = None;
+    for delay in backoff_ms {
+        if delay > 0 { tokio::time::sleep(std::time::Duration::from_millis(delay)).await; }
+        match client.get(&url).send().await {
+            Ok(r) => {
+                let s = r.status();
+                if s.is_success() { resp_opt = Some(r); break; }
+                let retryable = s.as_u16() >= 500 || s.as_u16() == 429;
+                last_err = Some(WebreconError::Network(format!("crt.sh -> {}", s)));
+                if !retryable { break; }
+            }
+            Err(e) => { last_err = Some(WebreconError::Network(e.to_string())); }
+        }
     }
+    let resp = match resp_opt {
+        Some(r) => r,
+        None => return Err(last_err.unwrap_or_else(|| WebreconError::Network("crt.sh: unreachable".into()))),
+    };
     let body: Value = resp.json().await.map_err(|e| WebreconError::Parse(e.to_string()))?;
     let arr = body.as_array().ok_or_else(|| WebreconError::Parse("crt.sh: not an array".into()))?;
     let mut out = Vec::with_capacity(arr.len() * 2);

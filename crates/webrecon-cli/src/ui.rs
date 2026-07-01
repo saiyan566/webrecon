@@ -20,7 +20,7 @@ pub fn banner() {
     eprintln!("{}", art.if_supports_color(Stream::Stderr, |s| s.bright_cyan()));
     let version = format!("v{}", env!("CARGO_PKG_VERSION"));
     eprintln!("  {} {}\n",
-        "personal recon toolkit".if_supports_color(Stream::Stderr, |s| s.bright_white()),
+        "attack-surface recon toolkit".if_supports_color(Stream::Stderr, |s| s.bright_white()),
         version.if_supports_color(Stream::Stderr, |s| s.style(Style::new().dimmed())),
     );
 }

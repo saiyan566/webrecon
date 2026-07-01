@@ -19,7 +19,7 @@ pub async fn run(
         _ => anyhow::bail!("subs requires a domain (e.g. example.com)"),
     };
 
-    let mut per_source: Vec<(String, usize, Option<String>)> = Vec::new();
+    let mut per_source: Vec<(String, usize, Option<String>, bool)> = Vec::new();
     let mut all_hosts: Vec<String> = Vec::new();
 
     if !no_passive {
@@ -29,7 +29,7 @@ pub async fn run(
         let results = passive::run_all(&client, &apex, &cfg.keys).await;
         if let Some(pb) = pb { pb.finish_and_clear(); }
         for r in results {
-            per_source.push((r.source.to_string(), r.hosts.len(), r.error.clone()));
+            per_source.push((r.source.to_string(), r.hosts.len(), r.error.clone(), r.skipped));
             all_hosts.extend(r.hosts);
         }
     }
@@ -47,7 +47,7 @@ pub async fn run(
         active_resolved = active::brute_force(&apex, &words, concurrency).await;
         if let Some(pb) = pb { pb.finish_and_clear(); }
         let active_hosts: Vec<String> = active_resolved.iter().map(|r| r.host.clone()).collect();
-        per_source.push(("brute-force".into(), active_hosts.len(), None));
+        per_source.push(("brute-force".into(), active_hosts.len(), None, false));
         all_hosts.extend(active_hosts);
     }
 
@@ -56,8 +56,8 @@ pub async fn run(
     if as_json {
         let out = serde_json::json!({
             "target": apex,
-            "sources": per_source.iter().map(|(s,c,e)| serde_json::json!({
-                "source": s, "count": c, "error": e
+            "sources": per_source.iter().map(|(s,c,e,sk)| serde_json::json!({
+                "source": s, "count": c, "error": e, "skipped": sk
             })).collect::<Vec<_>>(),
             "subdomains": merged,
             "resolved": active_resolved.iter().map(|r| serde_json::json!({
@@ -74,12 +74,12 @@ pub async fn run(
     ui::kv("total_unique", &merged.len().to_string());
 
     ui::section("Sources");
-    for (s, c, e) in &per_source {
-        let label = format!("{}", s);
-        if let Some(err) = e {
-            ui::kv(&label, &format!("{} (err: {})", c, err));
-        } else {
-            ui::kv(&label, &c.to_string());
+    for (s, c, e, sk) in &per_source {
+        let label = s.clone();
+        match e {
+            Some(err) if *sk => ui::kv(&label, &format!("skipped ({})", err)),
+            Some(err) => ui::kv(&label, &format!("{} (err: {})", c, err)),
+            None => ui::kv(&label, &c.to_string()),
         }
     }
 
