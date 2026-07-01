@@ -179,7 +179,7 @@ EXAMPLES
 #[derive(Subcommand, Debug)]
 enum Cmd {
     // ─── DISCOVERY ─────────────────────────────────────────────
-    /// RDAP / whois lookup for a domain or IP
+    /// [Discovery]  RDAP / whois lookup for a domain or IP
     #[command(long_about = "\
 Resolves WHOIS data via RDAP (https://rdap.org). For domains: registrar,
 nameservers, registrant org, abuse contact, important dates. For IPs:
@@ -189,10 +189,9 @@ EXAMPLES
   webrecon whois example.com
   webrecon whois 1.1.1.1 --json
 ")]
-    #[command(next_help_heading = "Discovery")]
     Whois { target: String },
 
-    /// ASN info — ASN/IP/domain lookup, org search, or deep subdomain sweep
+    /// [Discovery]  ASN info — ASN/IP/domain lookup, org search, or deep subdomain sweep
     #[command(long_about = "\
 Resolve ASNs three ways:
 
@@ -218,8 +217,7 @@ EXAMPLES
   webrecon asn nvidia --search             # all NVIDIA-owned ASNs
   webrecon asn nvidia.com --deep           # every ASN their subdomains touch
 ")]
-    #[command(next_help_heading = "Discovery")]
-    Asn {
+        Asn {
         target: String,
         /// Org/keyword search via BGPView (treat target as a query term)
         #[arg(long)]
@@ -232,7 +230,7 @@ EXAMPLES
         concurrency: usize,
     },
 
-    /// Announced CIDR prefixes for an ASN (RIPEstat)
+    /// [Discovery]  Announced CIDR prefixes for an ASN (RIPEstat)
     #[command(long_about = "\
 Lists all currently announced IPv4 + IPv6 prefixes for an ASN, sourced from
 RIPEstat. Useful for finding the full address space an organization owns.
@@ -241,10 +239,9 @@ EXAMPLES
   webrecon cidr AS15169       # Google
   webrecon cidr 13335 --json  # Cloudflare
 ")]
-    #[command(next_help_heading = "Discovery")]
-    Cidr { target: String },
+        Cidr { target: String },
 
-    /// Enumerate subdomains (passive + optional active brute force)
+    /// [Discovery]  Enumerate subdomains (passive + optional active brute force)
     #[command(long_about = "\
 Subdomain enumeration with multiple sources merged and deduped.
 
@@ -266,8 +263,7 @@ EXAMPLES
   webrecon subs target.com --active --wordlist big.txt --concurrency 200
   webrecon subs target.com --no-passive --active     # active only
 ")]
-    #[command(next_help_heading = "Discovery")]
-    Subs {
+        Subs {
         /// Apex domain (e.g. example.com)
         target: String,
         #[arg(long, long_help = "\
@@ -315,7 +311,7 @@ EXAMPLES
         concurrency: usize,
     },
 
-    /// CVE lookup — by ID, keyword search, or scan→fingerprint→CVE
+    /// [Analysis]   CVE lookup — by ID, keyword search, or scan→fingerprint→CVE
     #[command(long_about = "\
 CVE intelligence with three modes:
 
@@ -325,13 +321,12 @@ CVE intelligence with three modes:
 
 Run `webrecon cve <action> --help` for action-specific flags.
 ")]
-    #[command(next_help_heading = "Analysis")]
-    Cve {
+        Cve {
         #[command(subcommand)]
         action: CveAction,
     },
 
-    /// TCP connect port scan (host/IP/CIDR) with optional banner grab
+    /// [Enum]       TCP connect port scan (host/IP/CIDR) with optional banner grab
     #[command(long_about = "\
 Async TCP connect scan via tokio. Does NOT need root. Supports single host,
 IP, or small CIDR ranges (capped by --max-hosts to avoid runaway scans).
@@ -350,8 +345,7 @@ EXAMPLES
   webrecon scan target.com --ports 22,80,443
   webrecon scan 10.0.0.0/28 --no-banner --concurrency 1000
 ")]
-    #[command(next_help_heading = "Enumeration")]
-    Scan {
+        Scan {
         /// host, IP, or CIDR (e.g. example.com / 1.2.3.4 / 10.0.0.0/28)
         target: String,
         #[arg(long, long_help = "\
@@ -409,7 +403,7 @@ EXAMPLE
         max_hosts: usize,
     },
 
-    /// Live-host discovery across a CIDR (fast TCP probe to common ports)
+    /// [Discovery]  Live-host discovery across a CIDR (fast TCP probe to common ports)
     #[command(long_about = "\
 Feed a CIDR (or single IP) and get back only the hosts that respond on at
 least one of the probe ports. Much faster than a full port scan because
@@ -430,8 +424,7 @@ EXAMPLES
 Pipe the output into `webrecon scan` for full enumeration of the alive ones:
   webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs -I{} webrecon scan {} --top 1000
 ")]
-    #[command(next_help_heading = "Discovery")]
-    Alive {
+        Alive {
         /// CIDR (e.g. 10.0.0.0/24) or single IP
         target: String,
         #[arg(long, default_value = "80,443,22,25,53,445,3389,8080,8443", long_help = "\
@@ -548,7 +541,7 @@ EXAMPLE
         probe: bool,
     },
 
-    /// Full IP intel: IPinfo + GreyNoise + AbuseIPDB in parallel
+    /// [Intel]      Full IP intel: IPinfo + GreyNoise + AbuseIPDB in parallel
     #[command(long_about = "\
 Concurrent triple-lookup for a single IP:
 
@@ -563,14 +556,13 @@ EXAMPLES
   webrecon ipinfo 185.220.100.255 --max-age 30
   webrecon ipinfo 1.1.1.1 --json
 ")]
-    #[command(next_help_heading = "Intel & Reputation")]
-    Ipinfo {
+        Ipinfo {
         ip: String,
         #[arg(long, default_value_t = 90, long_help = "AbuseIPDB report-window in days (max 365).")]
         max_age: u32,
     },
 
-    /// Shodan host lookup — open ports, banners, vulns (no packets sent)
+    /// [Intel]      Shodan host lookup — open ports, banners, vulns (no packets sent)
     #[command(long_about = "\
 Pulls Shodan's cached scan record for an IP: open ports, service banners,
 known vulnerabilities, ASN/geo. Completely passive — Shodan already scanned.
@@ -580,20 +572,18 @@ Requires `shodan` key.
 EXAMPLES
   webrecon shodan 1.1.1.1
 ")]
-    #[command(next_help_heading = "Intel & Reputation")]
-    Shodan { ip: String },
+        Shodan { ip: String },
 
-    /// Censys host lookup — services + autonomous system + location
+    /// [Intel]      Censys host lookup — services + autonomous system + location
     #[command(long_about = "\
 Like Shodan but Censys. Returns the indexed host record: services, AS, OS,
 location. Often complements Shodan with different visibility.
 
 Requires `censys` key (Personal Access Token, Bearer auth).
 ")]
-    #[command(next_help_heading = "Intel & Reputation")]
-    Censys { ip: String },
+        Censys { ip: String },
 
-    /// VirusTotal v3 reputation for IP / domain / file hash
+    /// [Intel]      VirusTotal v3 reputation for IP / domain / file hash
     #[command(long_about = "\
 Auto-routes by indicator kind:
   IP        → /ip_addresses/{ip}
@@ -607,20 +597,18 @@ EXAMPLES
   webrecon vt 1.1.1.1
   webrecon vt 44d88612fea8a8f36de82e1278abb02f
 ")]
-    #[command(next_help_heading = "Intel & Reputation")]
-    Vt { indicator: String },
+        Vt { indicator: String },
 
-    /// Pulsedive risk score + threat tags for an indicator
+    /// [Intel]      Pulsedive risk score + threat tags for an indicator
     #[command(long_about = "\
 Pulsedive enrichment for an IP / domain / URL: risk score, threat
 categorization, attribution to feeds.
 
 Requires `pulsedive` key.
 ")]
-    #[command(next_help_heading = "Intel & Reputation")]
-    Pulsedive { indicator: String },
+        Pulsedive { indicator: String },
 
-    /// IntelligenceX search by selector (email, domain, btc, hash, URL, …)
+    /// [Intel]      IntelligenceX search by selector (email, domain, btc, hash, URL, …)
     #[command(long_about = "\
 Searches IntelligenceX's archive of breaches, leaks, and dark-web data. The
 search runs in two steps (POST + poll) — this command waits up to ~12s.
@@ -632,14 +620,13 @@ EXAMPLES
   webrecon intelx example.com --limit 50
   webrecon intelx 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa     # btc address
 ")]
-    #[command(next_help_heading = "Intel & Reputation")]
-    Intelx {
+        Intelx {
         term: String,
         #[arg(long, default_value_t = 20, long_help = "Max records to fetch (capped at 100).")]
         limit: usize,
     },
 
-    /// GitHub recon — user/org profile + public repos
+    /// [Intel]      GitHub recon — user/org profile + public repos
     #[command(long_about = "\
 Inspects a GitHub user or organization via the public REST API. Returns the
 profile (login, bio, location, blog, public_repos, followers, ...) and a list
@@ -652,15 +639,14 @@ EXAMPLES
   webrecon github anthropics --repos 50
   webrecon github saiyan566 --json
 ")]
-    #[command(next_help_heading = "Intel & Reputation")]
-    Github {
+        Github {
         /// GitHub username or org name
         user: String,
         #[arg(long, default_value_t = 30, long_help = "Number of repos to fetch (1–100).")]
         repos: usize,
     },
 
-    /// Unified recon: chains whois + asn + cidr + subs + ipinfo + shodan + vt
+    /// [Analysis]   Unified recon: chains whois + asn + cidr + subs + ipinfo + shodan + vt
     #[command(long_about = "\
 One command, every stage. Resolves the target to (apex domain, primary IP),
 then runs each module sequentially with live spinners. Missing API keys
@@ -683,8 +669,7 @@ EXAMPLES
   webrecon recon 1.1.1.1 --no-vt --no-shodan
   webrecon recon target.com --json > report.json
 ")]
-    #[command(next_help_heading = "Analysis")]
-    Recon {
+        Recon {
         target: String,
         #[arg(long, long_help = "Also TCP-scan the resolved IP using the top-N port list.")]
         scan: bool,
@@ -702,7 +687,7 @@ EXAMPLES
         top: u16,
     },
 
-    /// HTTP fingerprint: status, title, server, tech, CDN, redirects
+    /// [Enum]       HTTP fingerprint: status, title, server, tech, CDN, TLS SANs
     #[command(long_about = "\
 Probes hosts/URLs over HTTPS then HTTP (first responder wins). For each
 live endpoint returns: status, final URL after redirects, response time,
@@ -718,8 +703,7 @@ EXAMPLES
   webrecon http --list hosts.txt --concurrency 200
   webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs webrecon http
 ")]
-    #[command(next_help_heading = "Enumeration")]
-    Http {
+        Http {
         /// Hosts, host:port, or URLs. Multiple allowed.
         targets: Vec<String>,
         #[arg(long, long_help = "\
@@ -778,15 +762,14 @@ EXAMPLE
         prefer_http: bool,
     },
 
-    /// Show resolved config: which keys are loaded and from where
+    /// [Meta]       Show resolved config: which keys are loaded and from where
     #[command(long_about = "\
 Prints the resolved config: the config file path it looked at, and for each
 known key whether it's loaded (with the first/last 3 characters shown) or
 unset. Run after editing ~/.config/webrecon/config.toml to verify the file
 parsed and the right keys were picked up.
 ")]
-    #[command(next_help_heading = "Meta")]
-    Config,
+        Config,
 }
 
 #[tokio::main]
