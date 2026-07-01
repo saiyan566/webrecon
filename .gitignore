@@ -1,7 +1,19 @@
 /target
 **/*.rs.bk
 Cargo.lock.bak
+
+# Secrets — never commit
 .env
+.env.*
+configs/config.toml
+configs/local.toml
+configs/*.local.toml
+config.local.toml
+**/secrets.toml
+*.key
+*.pem
+
+# Editors / OS
 .idea/
 .vscode/
 *.swp

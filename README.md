@@ -1,177 +1,228 @@
-# webrecon
+<h1 align="center">webrecon</h1>
 
-Personal recon toolkit — one CLI for whois, ASN, CIDR, subdomains, port scanning, and CVE lookup. Built in **Rust** (core + CLI) with **Go** modules planned for later phases. Cross-platform: Linux (primary), macOS, Windows.
+<p align="center">
+  <b>Attack-surface reconnaissance in one CLI.</b><br>
+  Discovery → enumeration → fingerprinting → intel → CVE — from a domain, IP, ASN, or CIDR.
+</p>
 
-> Goal: never need to juggle nmap + whois + subfinder + amass again.
+<p align="center">
+  <a href="#install"><img alt="Rust 1.75+" src="https://img.shields.io/badge/rust-1.75%2B-orange"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-MIT-blue"></a>
+  <a href="#status"><img alt="Status" src="https://img.shields.io/badge/status-active-brightgreen"></a>
+  <img alt="Platforms" src="https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey">
+</p>
 
 ---
 
-## Status
+## Why webrecon
 
-| Phase | Scope                                       | Status |
-|-------|---------------------------------------------|--------|
-| 0     | Workspace scaffold, CLI, colored UI         | ✅ done |
-| 1     | `whois` (RDAP), `asn` (Cymru), `cidr` (RIPEstat) | ✅ done |
-| 2     | `subs` — subdomain enum (passive crt.sh/OTX/HackerTarget + active brute force) | ✅ done |
-| 3     | `scan` — TCP connect port scanner + banner grab (top-100 / top-1000 / custom) | ✅ done |
-| 3.5   | SYN scan (raw sockets, root)                | ⏳ planned |
-| 4     | `cve` — NVD lookup by ID, keyword search, or scan→fingerprint→CVE chain | ✅ done |
-| 5a    | Config + keys (`~/.config/webrecon/config.toml` + `WEBRECON_*` env) | ✅ done |
-| 5b    | `ipinfo` — unified IP intel (IPinfo + GreyNoise + AbuseIPDB in parallel) | ✅ done |
-| 5c    | `subs` boost: VirusTotal + Censys cert sources | ✅ done |
-| 5d    | `cve` upgrade: Vulners preferred, NVD with API key | ✅ done |
-| 5e+5f | `shodan` / `vt` / `pulsedive` / `intelx` — host + reputation + intel lookups | ✅ done |
-| 5g    | `recon` — unified pipeline chaining everything | ✅ done |
-| 5h    | `censys` — Censys host search | ✅ done |
+Every recon workflow ends up as a shell script that duct-tapes `subfinder → naabu → httpx → shodan → nuclei` together with `jq` and `xargs`. **webrecon collapses that pipeline into a single binary** with a stable JSON schema across every stage, sensible defaults, and no glue code.
+
+<table>
+<tr><th align="left">Replaces</th><th align="left">With</th></tr>
+<tr><td><code>whois</code>, <code>whodig</code></td><td><code>webrecon whois</code> (RDAP)</td></tr>
+<tr><td><code>subfinder</code>, <code>amass -passive</code>, <code>puredns</code></td><td><code>webrecon subs --active</code></td></tr>
+<tr><td><code>naabu</code>, <code>masscan</code> (small ranges), <code>nmap -sT</code></td><td><code>webrecon alive --full-scan</code></td></tr>
+<tr><td><code>httpx</code>, <code>wappalyzer-cli</code></td><td><code>webrecon http</code></td></tr>
+<tr><td><code>shodan-cli</code>, <code>censys-cli</code></td><td><code>webrecon shodan</code> / <code>censys</code></td></tr>
+<tr><td><code>bgpview.io</code>, <code>bgp.he.net</code> lookups</td><td><code>webrecon asn --search</code></td></tr>
+</table>
+
+---
+
+## The pipeline
+
+```
+    asn ─┐                                      ┌──►  scan   ──►  cve
+         ├──►  cidr  ──►  alive  ──►  http  ────┤
+   subs ─┘   (live IPs)  (services)  (TLS+tech) └──►  ipinfo / shodan / vt
+```
+
+Every stage is a standalone command **and** chained by `recon` or `alive --full-scan --probe`. Missing API keys skip their stage — nothing errors.
 
 ---
 
 ## Install
 
-Requires Rust 1.75+.
-
 ```bash
 git clone https://github.com/saiyan566/webrecon
 cd webrecon
 cargo build --release
-# Binary at: target/release/webrecon
+sudo ln -s "$PWD/target/release/webrecon" /usr/local/bin/webrecon
 ```
 
-Symlink it into your `$PATH`:
+Requires Rust 1.75+. On Debian/Kali also `apt install libssl-dev pkg-config`.
+
+---
+
+## Quick start
 
 ```bash
-sudo ln -s "$PWD/target/release/webrecon" /usr/local/bin/webrecon
+# One shot: domain to actionable findings
+webrecon recon example.com --scan --cve
+
+# CIDR → live hosts → all 65535 ports → HTTP fingerprint on survivors
+webrecon alive 185.136.69.0/24 --full-scan --probe
+
+# Every ASN registered to an org (bgp.he.net + peeringdb)
+webrecon asn --search google
+
+# Passive + active subdomain enum
+webrecon subs target.com --active --concurrency 200
+
+# HTTP fingerprint with TLS SAN extraction (works even when server 403's)
+webrecon http 1.2.3.4:8443
+```
+
+Every command supports `--json` for jq-friendly output:
+
+```bash
+webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs webrecon http
 ```
 
 ---
 
-## Usage
+## Commands
 
-```bash
-webrecon whois example.com
-webrecon whois 1.1.1.1
-webrecon whois example.com --json
+### Discovery
 
-webrecon asn 8.8.8.8           # IP -> ASN
-webrecon asn example.com       # resolves, then ASN per IP
-webrecon asn AS15169           # ASN -> AS name
+| Command | What it does |
+|---|---|
+| `whois <domain\|ip>` | RDAP lookup — registrar, dates, abuse contact, allocation |
+| `asn <target> [--search\|--deep]` | ASN by IP/domain, org-name search across bgp.he.net + PeeringDB, or deep sub-to-ASN sweep |
+| `cidr <ASN>` | Announced IPv4 + IPv6 prefixes from RIPEstat |
+| `subs <domain> [--active]` | Passive sources (crt.sh, OTX, HackerTarget, VT, Censys) + optional DNS brute force |
+| `alive <cidr> [--full-scan --probe]` | Live-host sweep → optional full port scan → optional HTTP/TLS fingerprint |
 
-webrecon cidr AS15169          # announced prefixes (v4 + v6)
+### Enumeration
 
-webrecon subs example.com                 # passive only
-webrecon subs example.com --active        # + brute force with embedded wordlist
-webrecon subs example.com --active --wordlist /path/to/list.txt --concurrency 100
-webrecon subs example.com --no-passive --active   # active only
+| Command | What it does |
+|---|---|
+| `scan <target> [--top N\|--ports SPEC]` | TCP connect scan with banner grab (host, IP, or CIDR) |
+| `http <targets…>` | HTTP fingerprint — status, redirects, tech, CDN, TLS subject/issuer/SAN |
 
-webrecon scan scanme.nmap.org              # top-100 ports, banner grab
-webrecon scan 1.1.1.1 --top 1000           # top-1000 ports
-webrecon scan target.com --ports 22,80,443,8000-8100
-webrecon scan 10.0.0.0/28 --no-banner --concurrency 1000
+### Analysis
 
-webrecon cve id CVE-2021-44228                     # single CVE lookup
-webrecon cve search nginx 1.18.0 --limit 10        # keyword search by product+version
-webrecon cve scan scanme.nmap.org                  # scan, fingerprint banners, fetch CVEs per service
-```
+| Command | What it does |
+|---|---|
+| `cve id <CVE-ID>` | NVD lookup |
+| `cve search <product> <version>` | Vulners → NVD keyword search |
+| `cve scan <target>` | Scan → fingerprint banners → match CVEs per service |
+| `recon <target> [--scan --cve]` | Full pipeline chain |
 
-> **NVD rate limit:** 5 requests / 30s without a key, 50 / 30s with one. `cve scan` walks services serially.
+### Intel & Reputation
+
+| Command | Source | Purpose |
+|---|---|---|
+| `ipinfo <ip>` | IPinfo + GreyNoise + AbuseIPDB (parallel) | Who / intent / history |
+| `shodan <ip>` | Shodan | Passive host facts — no packets sent |
+| `censys <ip>` | Censys | Services + AS + location |
+| `vt <indicator>` | VirusTotal v3 | Reputation for IP / domain / hash |
+| `pulsedive <indicator>` | Pulsedive | Risk score + threat tags |
+| `intelx <selector>` | IntelligenceX | Leak / dark-web selector search |
+| `github <user>` | GitHub API | Profile + public repos |
+
+### Meta
+
+| Command | What it does |
+|---|---|
+| `config` | Show which API keys resolved (masked) and from where |
+
+Run `webrecon <command> --help` for detailed flags, tuning advice, and examples on each one.
 
 ---
 
 ## Configuration
 
-Copy [configs/default.toml](configs/default.toml) to `~/.config/webrecon/config.toml` and fill in the keys you have. All keys are optional — modules that need a missing key say so.
+Config file:
 
 ```bash
 mkdir -p ~/.config/webrecon
 cp configs/default.toml ~/.config/webrecon/config.toml
 ${EDITOR:-vi} ~/.config/webrecon/config.toml
-webrecon config            # shows which keys are loaded
+webrecon config     # verify which keys resolved
 ```
 
-Environment variables override the file:
+Every key is optional. Modules whose key is unset skip silently — no errors, no prompts. Environment variables override the file:
 
 ```
-WEBRECON_SHODAN, WEBRECON_IPINFO, WEBRECON_PULSEDIVE, WEBRECON_VULNERS,
-WEBRECON_INTELX, WEBRECON_GREYNOISE, WEBRECON_VIRUSTOTAL, WEBRECON_OTX,
-WEBRECON_NVD, WEBRECON_ABUSEIPDB, WEBRECON_CENSYS, WEBRECON_GITHUB
+WEBRECON_SHODAN         WEBRECON_IPINFO        WEBRECON_ABUSEIPDB
+WEBRECON_GREYNOISE      WEBRECON_VIRUSTOTAL    WEBRECON_CENSYS
+WEBRECON_PULSEDIVE      WEBRECON_INTELX        WEBRECON_GITHUB
+WEBRECON_VULNERS        WEBRECON_NVD           WEBRECON_OTX
 ```
 
-### IP enrichment
+Rate limits without keys:
 
-`webrecon ipinfo <ip>` runs **IPinfo + GreyNoise + AbuseIPDB** in parallel and shows a single report. Any source whose key is missing is skipped (not an error).
+| Source | Unauthenticated | Authenticated |
+|---|---|---|
+| NVD | 5 req / 30 s | 50 req / 30 s |
+| GitHub | 60 req / hr | 5000 req / hr |
+| Shodan | – | account tier |
+| Censys | – | Personal Access Token (Bearer) |
+| bgp.he.net, PeeringDB, RIPEstat, crt.sh, Cymru, RDAP | ∞ | – |
 
-- **IPinfo** — *who/where:* geo, ASN, ISP, org, hosting/VPN/Tor flags
-- **GreyNoise** — *intent:* mass-scanning noise vs targeted; benign infra (RIOT)
-- **AbuseIPDB** — *history:* crowdsourced abuse score + recent reports
+---
 
-```bash
-webrecon ipinfo 8.8.8.8
-webrecon ipinfo 185.220.100.255 --max-age 30   # narrow abuse report window
-webrecon ipinfo 1.1.1.1 --json
-```
+## Global flags
 
-### Host + reputation + intel lookups
-
-```bash
-webrecon shodan 1.1.1.1                    # passive host facts: ports, banners, vulns
-webrecon vt example.com                    # VirusTotal v3 (auto-routes IP/domain/hash)
-webrecon vt 8.8.8.8
-webrecon vt 44d88612fea8a8f36de82e1278abb02f   # md5/sha1/sha256
-webrecon pulsedive evil.example.com        # risk score + threat tags
-webrecon intelx user@example.com           # leak/dark-web selector search
-webrecon intelx example.com --limit 50
-webrecon censys 1.1.1.1                    # services + autonomous system + location
-webrecon github torvalds                   # GitHub user/org profile + repos
-webrecon github saiyan566 --repos 50
-```
-
-> **Censys auth changed:** the new API uses a single Personal Access Token (Bearer auth). The old `censys_api_id` + `censys_api_secret` are gone — replace with a single `censys` field.
-> **GitHub:** key is optional but recommended — unauth is 60 req/hr, authed is 5000 req/hr.
-
-### Unified pipeline
-
-`webrecon recon <target>` chains it all: WHOIS → ASN → CIDR → subdomains → IP intel (IPinfo + GreyNoise + AbuseIPDB) → Shodan → VirusTotal. Optionally add `--scan` for a TCP scan, `--cve` to also pull CVEs from banners.
-
-```bash
-webrecon recon example.com                 # passive only (recommended starting point)
-webrecon recon example.com --scan          # + top-100 TCP scan with banners
-webrecon recon example.com --scan --cve    # full pipeline including CVE lookup per service
-webrecon recon 1.1.1.1 --no-vt --no-shodan # IP-only quick recon
-webrecon recon target.com --json > out.json
-```
-
-Skip flags: `--no-subs`, `--no-shodan`, `--no-vt`, `--no-ipinfo`. Missing keys are auto-skipped (not errors).
-
-### Global flags
-
-| Flag           | Default | Meaning                          |
-|----------------|---------|----------------------------------|
-| `--json`       | off     | Emit raw JSON instead of pretty  |
-| `--no-color`   | off     | Disable ANSI colors              |
-| `--timeout N`  | 15      | Per-request timeout (seconds)    |
-| `-v, --verbose`| off     | Verbose logging                  |
+| Flag | Default | Meaning |
+|---|---|---|
+| `--json` | off | Machine-readable output on every command |
+| `--no-color` | auto | Strip ANSI colors (auto-off when stdout is a pipe) |
+| `--timeout N` | 15 | Per-HTTP-request timeout, seconds |
+| `-v, --verbose` | off | Per-source diagnostics + skipped-reason logging |
 
 ---
 
 ## Architecture
 
 ```
-webrecon-cli       binary: clap subcommands, colored output
-  └─ webrecon-core shared types (Target, Finding, errors)
-  └─ webrecon-whois RDAP + Cymru + RIPEstat
+crates/
+├── webrecon-cli          binary — clap, colored UI, command wiring
+├── webrecon-core         shared types (Target, Finding, errors)
+├── webrecon-whois        RDAP + Cymru + RIPEstat + ASN search
+├── webrecon-subdomains   passive sources + DNS brute force
+├── webrecon-portscan     TCP connect scan + banner grab
+├── webrecon-http         httpx-style prober + TLS SAN grabbing
+├── webrecon-cve          NVD + Vulners fingerprint matcher
+├── webrecon-ipintel      IPinfo + GreyNoise + AbuseIPDB
+└── webrecon-intel        Shodan / Censys / VT / Pulsedive / IntelX / GitHub
 ```
 
-Later phases add `webrecon-subdomains`, `webrecon-portscan`, `webrecon-cve`. Go modules will live under `go/modules/` and be invoked as subprocesses for clean boundaries.
+Rust workspace, single binary output. No runtime dependencies, no plugins, no Docker.
 
 ---
 
-## Data sources (Phase 1)
+## Status
 
-- **RDAP** — `https://rdap.org/` (no key, modern whois)
-- **Team Cymru** — DNS-based IP→ASN (`origin.asn.cymru.com`, no key)
-- **RIPEstat** — `https://stat.ripe.net/data/announced-prefixes/` (no key)
+| Area | State |
+|---|---|
+| Workspace, CLI, colored UI | done |
+| WHOIS (RDAP), ASN (Cymru, bgp.he.net, PeeringDB), CIDR (RIPEstat) | done |
+| Subdomain enum — passive + active DNS brute | done |
+| Port scanning — top-100 / top-1000 / custom / full 65535 | done |
+| `alive` CIDR sweep + `--full-scan` + `--probe` chain | done |
+| HTTP fingerprinting — 30+ tech, CDN detection, TLS SAN | done |
+| CVE lookup — NVD + Vulners, scan→fingerprint→CVE chain | done |
+| IP intel — IPinfo + GreyNoise + AbuseIPDB parallel | done |
+| Third-party intel — Shodan, Censys, VT, Pulsedive, IntelX, GitHub | done |
+| Unified `recon` pipeline | done |
+| SYN scan (raw sockets, root) | planned |
+| Persistence + `diff` between runs | planned |
+| Nuclei-style vulnerability templates | planned |
+| IPv6 across all commands | planned |
 
-No API keys required for Phase 1.
+---
+
+## Contributing
+
+Issues and PRs welcome. Every new stage should:
+
+- Live in its own crate under `crates/`.
+- Skip cleanly when its API key is absent (never error).
+- Support `--json` with a stable schema.
+- Ship with `long_help` on every flag containing at least one example.
 
 ---
 
