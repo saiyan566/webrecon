@@ -318,6 +318,8 @@ Pipe the output into `webrecon scan` for full enumeration of the alive ones:
         scan_timeout: u64,
         #[arg(long, long_help = "Skip banner grab in the full-scan phase (faster).")]
         no_banner: bool,
+        #[arg(long, long_help = "After --full-scan, run HTTP fingerprint on every open port that looks web (any port; the HTTP prober will filter by response).")]
+        probe: bool,
     },
 
     /// Full IP intel: IPinfo + GreyNoise + AbuseIPDB in parallel
@@ -466,6 +468,37 @@ EXAMPLES
         top: u16,
     },
 
+    /// HTTP fingerprint: status, title, server, tech, CDN, redirects
+    #[command(long_about = "\
+Probes hosts/URLs over HTTPS then HTTP (first responder wins). For each
+live endpoint returns: status, final URL after redirects, response time,
+Server header, X-Powered-By, CDN (from headers), title, and a small
+tech-fingerprint set (nginx, WordPress, Grafana, Jenkins, Next.js, ...).
+
+Bare hosts get both schemes tried; host:port picks a scheme by port
+convention (443/8443 → https, 80/8080/8000/8888/3000 → http, else both).
+
+EXAMPLES
+  webrecon http example.com
+  webrecon http 1.2.3.4:8443 example.com https://internal.corp:9000
+  webrecon http --list hosts.txt --concurrency 200
+  webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs webrecon http
+")]
+    Http {
+        /// Hosts, host:port, or URLs. Multiple allowed.
+        targets: Vec<String>,
+        #[arg(long, long_help = "Read targets from file (one per line, # for comments).")]
+        list: Option<std::path::PathBuf>,
+        #[arg(long, default_value_t = 50, long_help = "Concurrent probes.")]
+        concurrency: usize,
+        #[arg(long, default_value_t = 10000, long_help = "Per-target timeout (ms).")]
+        timeout_ms: u64,
+        #[arg(long, long_help = "Do not follow redirects.")]
+        no_follow: bool,
+        #[arg(long, long_help = "Try HTTP before HTTPS (default is HTTPS first).")]
+        prefer_http: bool,
+    },
+
     /// Show resolved config: which keys are loaded and from where
     #[command(long_about = "\
 Prints the resolved config: the config file path it looked at, and for each
@@ -498,10 +531,10 @@ async fn main() {
             commands::scan::run(target, ports.as_deref(), *top, *concurrency, *connect_timeout, *no_banner, *max_hosts, cli.json).await
         }
         Cmd::Cve { action } => commands::cve::run(action, cli.timeout, cli.json).await,
-        Cmd::Alive { target, probe_ports, connect_timeout, concurrency, max_hosts, full_scan, scan_ports, scan_concurrency, scan_timeout, no_banner } => {
+        Cmd::Alive { target, probe_ports, connect_timeout, concurrency, max_hosts, full_scan, scan_ports, scan_concurrency, scan_timeout, no_banner, probe } => {
             commands::alive::run(
                 target, probe_ports, *connect_timeout, *concurrency, *max_hosts,
-                *full_scan, scan_ports, *scan_concurrency, *scan_timeout, *no_banner,
+                *full_scan, scan_ports, *scan_concurrency, *scan_timeout, *no_banner, *probe,
                 cli.json,
             ).await
         }
@@ -514,6 +547,9 @@ async fn main() {
         Cmd::Github { user, repos } => commands::intel::github(user, *repos, cli.timeout, cli.json).await,
         Cmd::Recon { target, scan, cve, no_subs, no_shodan, no_vt, no_ipinfo, top } => {
             commands::recon::run(target, *scan || *cve, *cve, *no_subs, *no_shodan, *no_vt, *no_ipinfo, *top, cli.timeout, cli.json).await
+        }
+        Cmd::Http { targets, list, concurrency, timeout_ms, no_follow, prefer_http } => {
+            commands::http::run(targets, list.as_deref(), *concurrency, *timeout_ms, *no_follow, *prefer_http, cli.json).await
         }
         Cmd::Config => commands::config_show::run(cli.json),
     };

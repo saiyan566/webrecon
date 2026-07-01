@@ -9,6 +9,7 @@ members = [
     "crates/webrecon-cve",
     "crates/webrecon-ipintel",
     "crates/webrecon-intel",
+    "crates/webrecon-http",
 ]
 
 [workspace.package]

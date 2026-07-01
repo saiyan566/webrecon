@@ -1,0 +1,17 @@
+[package]
+name = "webrecon-http"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+tokio = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+futures = { workspace = true }
+url = { workspace = true }
+anyhow = { workspace = true }
+webrecon-core = { path = "../webrecon-core" }

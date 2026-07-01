@@ -5,6 +5,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use webrecon_portscan::scan::{discover_alive, scan_host, ScanOpts};
 use webrecon_portscan::ports::parse_spec;
+use webrecon_http::{probe_many, ProbeOpts};
 
 pub async fn run(
     target: &str,
@@ -17,6 +18,7 @@ pub async fn run(
     scan_concurrency: usize,
     scan_timeout_ms: u64,
     no_banner: bool,
+    do_http_probe: bool,
     as_json: bool,
 ) -> Result<()> {
     let probe_ports = parse_spec(probe_ports_spec)?;
@@ -116,6 +118,37 @@ pub async fn run(
                 let mut line = format!("  {:>5}/tcp  {}", p.port, svc);
                 if let Some(b) = &p.banner { line.push_str(&format!("  {}", b)); }
                 ui::list_item(&line);
+            }
+        }
+    }
+
+    // Optional phase 3: HTTP fingerprint every open port on every alive host.
+    if do_http_probe {
+        let source_ports: Vec<(IpAddr, u16)> = match &full_results {
+            Some(rs) => rs.iter().flat_map(|(ip, open)| open.iter().map(move |p| (*ip, p.port))).collect(),
+            None => alive.iter().flat_map(|(ip, ports)| ports.iter().map(move |p| (*ip, *p))).collect(),
+        };
+        if !source_ports.is_empty() {
+            let inputs: Vec<String> = source_ports.iter().map(|(ip, p)| format!("{}:{}", ip, p)).collect();
+            if !as_json {
+                ui::info(&format!("http probe — {} endpoint(s)", inputs.len()));
+            }
+            let http_opts = ProbeOpts { timeout: Duration::from_secs(8), ..Default::default() };
+            let http_results = probe_many(inputs, 100, http_opts).await;
+            if !as_json {
+                ui::section("HTTP fingerprint");
+                ui::kv("responded", &http_results.len().to_string());
+                for r in &http_results {
+                    let title = r.title.clone().unwrap_or_default();
+                    let cdn = r.cdn.clone().map(|c| format!(" cdn={c}")).unwrap_or_default();
+                    let server = r.server.clone().map(|s| format!(" server={s}")).unwrap_or_default();
+                    let tech = if r.tech.is_empty() { String::new() } else { format!(" tech=[{}]", r.tech.join(",")) };
+                    let title_s = if title.is_empty() { String::new() } else {
+                        let t: String = title.chars().take(70).collect();
+                        format!(" — {t}")
+                    };
+                    ui::list_item(&format!("{:<3} {}{}{}{}{}", r.status, r.url, server, cdn, tech, title_s));
+                }
             }
         }
     }
