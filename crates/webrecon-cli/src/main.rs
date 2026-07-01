@@ -300,9 +300,9 @@ Pipe the output into `webrecon scan` for full enumeration of the alive ones:
     Alive {
         /// CIDR (e.g. 10.0.0.0/24) or single IP
         target: String,
-        #[arg(long, default_value = "80,443,22,8080,3389", long_help = "Comma-separated probe ports.")]
+        #[arg(long, default_value = "80,443,22,25,53,445,3389,8080,8443", long_help = "Comma-separated probe ports.")]
         probe_ports: String,
-        #[arg(long, default_value_t = 500, long_help = "Per-port TCP connect timeout (milliseconds).")]
+        #[arg(long, default_value_t = 1200, long_help = "Per-port TCP connect timeout (milliseconds).")]
         connect_timeout: u64,
         #[arg(long, default_value_t = 1000, long_help = "Concurrent IP probes.")]
         concurrency: usize,

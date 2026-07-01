@@ -63,6 +63,12 @@ pub async fn run(
             let plist: Vec<String> = ports.iter().map(|p| p.to_string()).collect();
             ui::list_item(&format!("{:<16}  [{}]", ip.to_string(), plist.join(",")));
         }
+    } else {
+        ui::info("no hosts responded on any probe port. Common causes:");
+        ui::list_item("range is residential/firewalled ISP space (inbound SYN dropped) — try a known hosting CIDR like 34.190.208.0/24");
+        ui::list_item("timeout too tight — retry with --connect-timeout 2500");
+        ui::list_item("services on non-default ports — retry with --probe-ports 80,443,22,25,53,110,143,445,993,995,1723,3306,3389,5432,5900,8080,8443");
+        ui::list_item("egress from your host is blocked (corporate/VPN filter) — test connectivity: `curl -v https://1.1.1.1`");
     }
     Ok(())
 }
