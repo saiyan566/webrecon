@@ -3,62 +3,116 @@ mod commands;
 
 use clap::{Parser, Subcommand};
 
+const ABOUT: &str = "Attack-surface recon in one CLI — discovery, enumeration, intel, CVE.";
+
 const LONG_ABOUT: &str = "\
-webrecon — a personal recon toolkit that bundles WHOIS / ASN / CIDR lookups,
-subdomain enumeration, port scanning, CVE matching, IP reputation, and intel
-sources (Shodan, VirusTotal, Pulsedive, IntelX, Censys, GitHub) into a single
-colored CLI.
+webrecon — attack-surface reconnaissance in a single, colored CLI.
+
+  A composable pipeline that goes from a domain / IP / ASN / CIDR down to
+  live services, fingerprinted tech, and matched CVEs — while pulling in
+  Shodan, Censys, VirusTotal, GreyNoise, IPinfo, AbuseIPDB, Pulsedive,
+  IntelX, and GitHub for external intelligence.
+
+THE PIPELINE
+
+     asn  ─┐                                   ┌─►  scan   ──►  cve
+           ├─►  cidr  ──►  alive  ──►  http  ──┤
+    subs  ─┘   (live IPs)  (services)  (TLS,   └─►  ipinfo / shodan / vt
+                                        tech)
+
+  Every stage has a standalone command AND is chained by `recon` or
+  `alive --full-scan --probe`. Missing API keys skip their stage — never
+  error.
+
+QUICK START
+
+  webrecon recon example.com --scan --cve
+      one shot: whois → asn → cidr → subs → ipinfo → shodan → vt → scan → cve
+
+  webrecon alive 1.2.3.0/24 --full-scan --probe
+      discovery sweep → full port scan → HTTP + TLS fingerprint on survivors
+
+  webrecon asn --search google
+      every ASN registered to \"google\" (bgp.he.net + peeringdb)
+
+  webrecon subs target.com --active
+      passive sources + wordlist DNS brute force
 
 CONFIGURATION
-  Copy `configs/default.toml` to `~/.config/webrecon/config.toml` and fill in
-  any API keys you have. Modules that need a missing key are skipped, not
-  errored. Env vars override the file:
 
-    WEBRECON_SHODAN, WEBRECON_IPINFO, WEBRECON_PULSEDIVE, WEBRECON_VULNERS,
-    WEBRECON_INTELX, WEBRECON_GREYNOISE, WEBRECON_VIRUSTOTAL, WEBRECON_OTX,
-    WEBRECON_NVD, WEBRECON_ABUSEIPDB, WEBRECON_CENSYS, WEBRECON_GITHUB
+  Config file:  ~/.config/webrecon/config.toml
+  Template:     configs/default.toml
 
-  Run `webrecon config` to see which keys are loaded (masked).
+  Every key is optional. Modules whose key is unset are skipped silently.
+  Environment variables override the file:
 
-GLOBAL FLAGS
-  --json          machine-readable output for every command
-  --no-color      strip ANSI colors (auto-off when stdout isn't a TTY)
-  --timeout N     per-request HTTP timeout (seconds, default 15)
-  -v, --verbose   verbose logging
+    WEBRECON_SHODAN         WEBRECON_IPINFO        WEBRECON_ABUSEIPDB
+    WEBRECON_GREYNOISE      WEBRECON_VIRUSTOTAL    WEBRECON_CENSYS
+    WEBRECON_PULSEDIVE      WEBRECON_INTELX        WEBRECON_GITHUB
+    WEBRECON_VULNERS        WEBRECON_NVD           WEBRECON_OTX
 
-EXAMPLES
-  webrecon recon example.com --scan --cve   # full pipeline
-  webrecon subs target.com --active         # subdomain enum + brute force
-  webrecon scan 10.0.0.0/28 --top 1000      # CIDR-wide port scan
-  webrecon cve scan target.com              # scan → fingerprint → CVE
-  webrecon ipinfo 1.1.1.1                   # IPinfo + GreyNoise + AbuseIPDB
-  webrecon github torvalds --repos 50
+  Run  webrecon config  to see which keys resolved (values are masked).
 
-Each subcommand has its own `--help` with detailed flags and examples.
+TIP
+  Every subcommand supports --json for jq-friendly output, and every flag
+  documented in this help has a longer explanation under its own `--help`.
 ";
+
+const AFTER_HELP: &str = "\
+Subcommand help:  webrecon <command> --help
+Config diagnosis: webrecon config
+Report issues:    https://github.com/saiyan566/webrecon";
 
 #[derive(Parser, Debug)]
 #[command(
     name = "webrecon",
     version,
-    about = "Personal recon toolkit — whois, subs, scan, CVE, intel — one CLI",
+    about = ABOUT,
     long_about = LONG_ABOUT,
+    after_help = AFTER_HELP,
+    disable_version_flag = false,
+    max_term_width = 100,
 )]
 struct Cli {
-    /// Emit JSON instead of pretty output
-    #[arg(long, global = true, long_help = "Emit one JSON object/array on stdout instead of the colored human report. Stable shape across commands — pipe to jq, save to a file, etc.")]
+    #[arg(long, global = true, help = "Emit JSON instead of pretty output", long_help = "\
+Emit one JSON object (or array) on stdout instead of the colored human
+report. Shape is stable across commands — pipe to jq, save to a file,
+or feed into another `webrecon` invocation.
+
+EXAMPLES
+  webrecon subs example.com --json | jq -r '.subdomains[]'
+  webrecon alive 10.0.0.0/24 --json > sweep.json
+  webrecon asn --search google --json | jq '.asns[].asn'")]
     json: bool,
 
-    /// Disable ANSI colors
-    #[arg(long, global = true, long_help = "Strip ANSI color codes from output. Color is auto-disabled when stdout is not a TTY (e.g. piping into a file or another command), so you rarely need this explicitly.")]
+    #[arg(long, global = true, help = "Disable ANSI colors", long_help = "\
+Strip ANSI color codes from output. Colors are already auto-disabled when
+stdout is not a TTY (i.e. when you pipe into a file or another command),
+so this flag is only needed for terminals that render escape codes
+literally, or when writing scripts against the human output.")]
     no_color: bool,
 
-    /// Per-request HTTP timeout in seconds
-    #[arg(long, global = true, default_value_t = 15, long_help = "Per-HTTP-request timeout in seconds. Increase for slow upstreams (e.g. `--timeout 60` for crt.sh on large domains, or for IntelX which polls results).")]
+    #[arg(long, global = true, default_value_t = 15, help = "Per-request HTTP timeout in seconds",
+        long_help = "\
+Per-HTTP-request timeout in seconds. Applies to every outbound HTTP call
+in every intel / API-backed command (Shodan, VirusTotal, GitHub, ...).
+Does NOT apply to raw TCP scans — those have their own --connect-timeout.
+
+Raise for slow upstreams: crt.sh with a huge domain, IntelX (which polls
+until results are ready), or any endpoint behind a Tor gateway.
+
+EXAMPLES
+  --timeout 5      fail-fast (CI / bulk enum)
+  --timeout 15     default
+  --timeout 60     crt.sh, IntelX
+  --timeout 120    very slow upstreams over VPN")]
     timeout: u64,
 
-    /// Verbose logging
-    #[arg(short, long, global = true)]
+    #[arg(short, long, global = true, help = "Verbose logging", long_help = "\
+Prints extra diagnostics: which sources were tried, which were skipped
+(and why), per-source response counts, and network errors that were
+silently swallowed. Useful when a command returns fewer results than
+expected.")]
     verbose: bool,
 
     #[command(subcommand)]
@@ -124,6 +178,7 @@ EXAMPLES
 
 #[derive(Subcommand, Debug)]
 enum Cmd {
+    // ─── DISCOVERY ─────────────────────────────────────────────
     /// RDAP / whois lookup for a domain or IP
     #[command(long_about = "\
 Resolves WHOIS data via RDAP (https://rdap.org). For domains: registrar,
@@ -134,6 +189,7 @@ EXAMPLES
   webrecon whois example.com
   webrecon whois 1.1.1.1 --json
 ")]
+    #[command(help_heading = "Discovery")]
     Whois { target: String },
 
     /// ASN info — ASN/IP/domain lookup, org search, or deep subdomain sweep
@@ -162,6 +218,7 @@ EXAMPLES
   webrecon asn nvidia --search             # all NVIDIA-owned ASNs
   webrecon asn nvidia.com --deep           # every ASN their subdomains touch
 ")]
+    #[command(help_heading = "Discovery")]
     Asn {
         target: String,
         /// Org/keyword search via BGPView (treat target as a query term)
@@ -184,6 +241,7 @@ EXAMPLES
   webrecon cidr AS15169       # Google
   webrecon cidr 13335 --json  # Cloudflare
 ")]
+    #[command(help_heading = "Discovery")]
     Cidr { target: String },
 
     /// Enumerate subdomains (passive + optional active brute force)
@@ -208,6 +266,7 @@ EXAMPLES
   webrecon subs target.com --active --wordlist big.txt --concurrency 200
   webrecon subs target.com --no-passive --active     # active only
 ")]
+    #[command(help_heading = "Discovery")]
     Subs {
         /// Apex domain (e.g. example.com)
         target: String,
@@ -266,6 +325,7 @@ CVE intelligence with three modes:
 
 Run `webrecon cve <action> --help` for action-specific flags.
 ")]
+    #[command(help_heading = "Analysis")]
     Cve {
         #[command(subcommand)]
         action: CveAction,
@@ -290,6 +350,7 @@ EXAMPLES
   webrecon scan target.com --ports 22,80,443
   webrecon scan 10.0.0.0/28 --no-banner --concurrency 1000
 ")]
+    #[command(help_heading = "Enumeration")]
     Scan {
         /// host, IP, or CIDR (e.g. example.com / 1.2.3.4 / 10.0.0.0/28)
         target: String,
@@ -369,6 +430,7 @@ EXAMPLES
 Pipe the output into `webrecon scan` for full enumeration of the alive ones:
   webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs -I{} webrecon scan {} --top 1000
 ")]
+    #[command(help_heading = "Discovery")]
     Alive {
         /// CIDR (e.g. 10.0.0.0/24) or single IP
         target: String,
@@ -501,6 +563,7 @@ EXAMPLES
   webrecon ipinfo 185.220.100.255 --max-age 30
   webrecon ipinfo 1.1.1.1 --json
 ")]
+    #[command(help_heading = "Intel & Reputation")]
     Ipinfo {
         ip: String,
         #[arg(long, default_value_t = 90, long_help = "AbuseIPDB report-window in days (max 365).")]
@@ -517,6 +580,7 @@ Requires `shodan` key.
 EXAMPLES
   webrecon shodan 1.1.1.1
 ")]
+    #[command(help_heading = "Intel & Reputation")]
     Shodan { ip: String },
 
     /// Censys host lookup — services + autonomous system + location
@@ -526,6 +590,7 @@ location. Often complements Shodan with different visibility.
 
 Requires `censys` key (Personal Access Token, Bearer auth).
 ")]
+    #[command(help_heading = "Intel & Reputation")]
     Censys { ip: String },
 
     /// VirusTotal v3 reputation for IP / domain / file hash
@@ -542,6 +607,7 @@ EXAMPLES
   webrecon vt 1.1.1.1
   webrecon vt 44d88612fea8a8f36de82e1278abb02f
 ")]
+    #[command(help_heading = "Intel & Reputation")]
     Vt { indicator: String },
 
     /// Pulsedive risk score + threat tags for an indicator
@@ -551,6 +617,7 @@ categorization, attribution to feeds.
 
 Requires `pulsedive` key.
 ")]
+    #[command(help_heading = "Intel & Reputation")]
     Pulsedive { indicator: String },
 
     /// IntelligenceX search by selector (email, domain, btc, hash, URL, …)
@@ -565,6 +632,7 @@ EXAMPLES
   webrecon intelx example.com --limit 50
   webrecon intelx 1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa     # btc address
 ")]
+    #[command(help_heading = "Intel & Reputation")]
     Intelx {
         term: String,
         #[arg(long, default_value_t = 20, long_help = "Max records to fetch (capped at 100).")]
@@ -584,6 +652,7 @@ EXAMPLES
   webrecon github anthropics --repos 50
   webrecon github saiyan566 --json
 ")]
+    #[command(help_heading = "Intel & Reputation")]
     Github {
         /// GitHub username or org name
         user: String,
@@ -614,6 +683,7 @@ EXAMPLES
   webrecon recon 1.1.1.1 --no-vt --no-shodan
   webrecon recon target.com --json > report.json
 ")]
+    #[command(help_heading = "Analysis")]
     Recon {
         target: String,
         #[arg(long, long_help = "Also TCP-scan the resolved IP using the top-N port list.")]
@@ -648,6 +718,7 @@ EXAMPLES
   webrecon http --list hosts.txt --concurrency 200
   webrecon alive 10.0.0.0/24 --json | jq -r '.alive[].ip' | xargs webrecon http
 ")]
+    #[command(help_heading = "Enumeration")]
     Http {
         /// Hosts, host:port, or URLs. Multiple allowed.
         targets: Vec<String>,
@@ -714,6 +785,7 @@ known key whether it's loaded (with the first/last 3 characters shown) or
 unset. Run after editing ~/.config/webrecon/config.toml to verify the file
 parsed and the right keys were picked up.
 ")]
+    #[command(help_heading = "Meta")]
     Config,
 }
 
